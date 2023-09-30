@@ -2,6 +2,7 @@ use std::ops::{Index, IndexMut};
 use std::any::{TypeId};
 use std::ops::Range;
 use std::fmt::Display;
+use std::fmt::Debug;
 use std::vec;
 
 use num::{Num, NumCast};
@@ -29,11 +30,20 @@ pub trait MatrixValues: Copy + Display + PartialEq + Num + NumCast{}
 impl<T> MatrixValues for T where T: Copy + Display + PartialEq + Num + NumCast {}
 
 impl<T: MatrixValues> Matrix<T> {
-    pub fn new_square_with_value(size:usize, value: T) -> Matrix<T> {
-        let mut rows = Vec::<Row<T>>::with_capacity(size);
-        let mut rowsr = Vec::<& Row<T>>::with_capacity(size);
-        for index in 0..size {
-            rows.push(Row::new_row_with_value(size, value));
+    pub fn new_square_with_constant_values(n_rows:usize, value: T) -> Matrix<T> {
+        let mut rows = Vec::<Row<T>>::with_capacity(n_rows);
+        for _ in 0..n_rows {
+            rows.push(Row::new_row_with_value(n_rows, value));
+        } 
+        Matrix {
+             rows,
+            }
+    }
+
+    pub fn new_with_constant_values(n_rows:usize, n_collumns: usize, value: T) -> Matrix<T> {
+        let mut rows = Vec::<Row<T>>::with_capacity(n_rows);
+        for _ in 0..n_rows {
+            rows.push(Row::new_row_with_value(n_collumns, value));
         } 
         Matrix {
              rows,
@@ -511,4 +521,38 @@ pub fn linspace<T: MatrixValues>(lower_bound: T, higher_bound: T, steps: usize) 
         lin_spaced_vec.push(lower_bound + step_size * NumCast::from(i).unwrap());
     }
     lin_spaced_vec
+}
+
+// a first attempt to do a matrix that can hold any struct that implements Copy. Usefull as Matrix struct is not cabable of holding a 
+// non standard generics. Very limited in higher level functionality 
+// name subject to change
+pub struct SuperMatrix<U: Clone> {
+    matrix_rows: Vec<Vec<U>>
+}
+
+impl<U: Clone> SuperMatrix<U> {
+    pub fn new_with_cloned_values(n_rows: usize, n_collumns: usize, struct_to_clone: U) -> SuperMatrix<U>{
+        let mut matrix_rows: Vec<Vec<U>> = Vec::with_capacity(n_rows);
+        for _ in 0..n_rows {
+            let mut row = Vec::<U>::with_capacity(n_collumns);
+            for _ in 0..n_collumns{
+                row.push(struct_to_clone.clone());
+            }
+            matrix_rows.push(row)
+        } 
+        SuperMatrix { matrix_rows }
+    }
+}
+
+impl<U:Clone> Index<usize> for SuperMatrix<U> {
+    type Output = Vec<U>;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.matrix_rows[index]
+    }
+}
+
+impl<U: Clone> IndexMut<usize> for SuperMatrix<U> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.matrix_rows[index]
+    }
 }
