@@ -2,8 +2,8 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-use core::f32;
-use std::ops::{Index, IndexMut, Deref};
+use core::{f32, panic};
+use std::ops::{Index, IndexMut, Deref, Add};
 use std::any::{TypeId};
 use std::sync::Arc;
 use std::ops::Range;
@@ -11,11 +11,23 @@ use std::fmt::Display;
 use std::fmt::Debug;
 use std::time::Instant;
 use std::vec;
-use cudarc::cublas::{safe, result, sys, Gemv, CudaBlas, GemvConfig};
+use cudarc::cublas::{safe, result, sys, Gemv, CudaBlas, GemvConfig, Gemm};
 
-use cudarc::driver::{CudaDevice, DevicePtr, CudaSlice};
+use cudarc::driver::{CudaDevice, DevicePtr, CudaSlice, DeviceSlice};
+use num::traits::NumOps;
 use num::{Num, NumCast};
+use rand::Rng;
+use rand::distributions::uniform::SampleUniform;
 
+pub fn abs<T: PartialOrd + NumCast + std::ops::Mul<Output = T>>(value: T) -> T {
+    if value >= NumCast::from(0).unwrap() {
+        return value;
+    } else {
+        let min_one:T = NumCast::from(-1).unwrap();
+        let return_value: T = value * min_one;
+        return return_value;
+    }
+}
 
 pub fn vec_dot_vec<T: MatrixValues>(vec_1: Vec<T>, vec_2: Vec<T>) -> T {
     if !(vec_1.len()==vec_2.len()) {
@@ -24,7 +36,12 @@ pub fn vec_dot_vec<T: MatrixValues>(vec_1: Vec<T>, vec_2: Vec<T>) -> T {
 
     let vec_len = vec_1.len();
 
-    let piecewice_mut = vec_1.iter().zip(vec_2).map(|(u, v)| u.clone() * v.clone()).collect();
+    let piecewice_mut = vec_1.iter().zip(vec_2).map(|(u, v)| 
+        // if !(*u == NumCast::from(0).unwrap() || v == NumCast::from(0).unwrap()) {
+            u.clone() * v.clone()).collect();
+        // } else {
+            // NumCast::from(0).unwrap()
+        // }).collect();
 
     vec_summed(piecewice_mut)
 }
@@ -32,7 +49,9 @@ pub fn vec_dot_vec<T: MatrixValues>(vec_1: Vec<T>, vec_2: Vec<T>) -> T {
 pub fn vec_summed<T: MatrixValues>(vec_1: Vec<T>) -> T {
     let mut total: T = NumCast::from(0).unwrap();
     for j in 0..vec_1.len() {
-        total = total + vec_1[j];
+        // if !(vec_1[j] == NumCast::from(0).unwrap()) {
+            total = total + vec_1[j];
+        // }
     }
     total
 }
@@ -43,7 +62,14 @@ pub fn row_dot_collumn<T: MatrixValues>(row: & Row<T>, collumn: & Collumn<T>) ->
     }
     let n_elements = row.len();
 
-    vec_summed( (0..n_elements).into_iter().map(|j| row[j]*collumn[j]).collect() )
+    let piecewice_mut = (0..n_elements).into_iter().map(|j| 
+        // if !(row[j] == NumCast::from(0).unwrap() || collumn[j] == NumCast::from(0).unwrap()) {
+            row[j]*collumn[j]).collect();
+        // } else {
+            // NumCast::from(0).unwrap()
+        // }).collect();
+
+    vec_summed(piecewice_mut)
 
 }
 
@@ -59,6 +85,48 @@ pub fn matrix_dot_collumn<T: MatrixValues>(matrix: & Matrix<T>, collumn: & Collu
     }
 
     result_collumn
+}
+
+// pub fn row_dot_collumn<T: MatrixValues>(row:& Row<T>, collumn:& Collumn<T>) -> T {
+//     if 
+// }
+
+pub fn matrix_add_matrix<T: MatrixValues>(mut A_matrix: Matrix<T>, B_matrix:& Matrix<T>) -> Matrix<T> {
+    // this function consumes the A_matrix and takes a reference to the B_matrix (no need to consume it) 
+    // returns the altered A_matrix
+    if !(A_matrix.height() == B_matrix.height() || A_matrix.width() == B_matrix.width()) {
+        panic!("Matrices dimensions do not match for adition! given: [{}x{}] + [{}x{}]", A_matrix.height(), A_matrix.width(), B_matrix.height(), B_matrix.width());
+    }
+
+    let N = A_matrix.height();
+    let M = A_matrix.width();
+
+    for row_index in 0..N {
+        A_matrix[row_index].addition_row_with_external_row(&B_matrix[row_index]);
+    }
+
+    A_matrix
+}
+
+pub fn matrix_dot_matrix<T: MatrixValues>(A_matrix:& Matrix<T>, B_matrix:& Matrix<T>) -> Matrix<T> {
+    // this function takes 2 references to the matrices to multiply, returns a new matrix.
+    // As in place matrix multiplication is practically impossible, there should be the space for all 3 in memory.
+
+    // this is a slow function because of: many operations and collumn operations in B_matrix.
+    // Ideally A_matrix would be row major, B_matrix collumn major
+    if !(A_matrix.width() == B_matrix.height()) {
+        panic!("Matrices dimensions do not match for dot operation! given: [{}x{}] + [{}x{}]", A_matrix.height(), A_matrix.width(), B_matrix.height(), B_matrix.width());
+    }
+
+    let mut C_matrix: Matrix<T> = Matrix::new_with_constant_values(A_matrix.height(), B_matrix.width(), NumCast::from(0).unwrap());
+
+    for row_index in 0..C_matrix.height() {
+        for collumn_index in 0..C_matrix.width() {
+            C_matrix[row_index][collumn_index] = row_dot_collumn(&A_matrix[row_index], &B_matrix.get_collumn(collumn_index))
+        }
+    }
+
+    C_matrix
 }
 
 pub trait GPUValues: std::marker::Unpin + cudarc::driver::DeviceRepr +cudarc::driver::ValidAsZeroBits + std::default::Default{}
@@ -218,33 +286,77 @@ impl<T: MatrixValues + GPUValues> RepeatedMatrixDotVectorGPU<T> {
     }
 }
 
-// fn setup_matrix_dot_collumn_gpu_values<T: MatrixValues + GPUValues>(matrix: & Matrix<T>, collumn: & Collumn<T>, dev: & Arc<CudaDevice>) -> MatrixDotCollumnSystem<T> {
-//     let collumn_length = collumn.len();
+pub fn matrix_dot_matrix_gpu<T: MatrixValues + GPUValues>(A_matrix:& Matrix<T>, B_matrix:& Matrix<T>) -> Matrix<T>
+where CudaBlas: Gemm<T>{
+    // this function takes 2 references to the matrices to multiply, returns a new matrix.
+    // As in place matrix multiplication is practically impossible, there should be the space for all 3 in memory.
+
+    // this is a slow function because of: many operations and collumn operations in B_matrix.
+    // Ideally A_matrix would be row major, B_matrix collumn major
+    if !(A_matrix.width() == B_matrix.height()) {
+        panic!("Matrices dimensions do not match for dot operation! given: [{}x{}] + [{}x{}]", A_matrix.height(), A_matrix.width(), B_matrix.height(), B_matrix.width());
+    }
+
+    let start_prep = Instant::now();
+    let dev: Arc<CudaDevice> = CudaDevice::new(0).unwrap();
+    let cublas_handle = CudaBlas::new(dev.clone()).unwrap();
+
+    let result_matrix_height = A_matrix.height();
+    let result_matrix_width = B_matrix.width();
+
+    // transforming and transferring matricises in turn so less peak memory is needed.
+    let A_matrix_vec = A_matrix.to_vec_row_major();
+    let gpu_A_matrix = dev.htod_copy(A_matrix_vec).unwrap();
+    let B_matrix_vec = B_matrix.to_vec_row_major();
+    let gpu_B_matrix = dev.htod_copy(B_matrix_vec).unwrap();
+    let mut gpu_result_matrix = dev.alloc_zeros::<T>(result_matrix_height * result_matrix_width).unwrap();
+    let time_prep = start_prep.elapsed();
+    let start_calc = Instant::now();
+    unsafe{
+        cublas_handle.gemm(
+            safe::GemmConfig { 
+                transa: sys::cublasOperation_t::CUBLAS_OP_T, 
+                transb: sys::cublasOperation_t::CUBLAS_OP_T, 
+                m: A_matrix.height() as i32, 
+                n: B_matrix.width() as i32, 
+                k: A_matrix.width() as i32, 
+                alpha: NumCast::from(1).unwrap(), 
+                lda: A_matrix.width() as i32, 
+                ldb: B_matrix.width() as i32, 
+                beta: NumCast::from(0).unwrap(), 
+                ldc: A_matrix.height()  as i32}, 
+            &gpu_A_matrix, 
+            &gpu_B_matrix, 
+            &mut gpu_result_matrix).unwrap();
+    }
+    // dev.synchronize();
+
+    let time_calc = start_calc.elapsed();
+
+    let start_reclaim = Instant::now();
+    let reclaim = dev.sync_reclaim(gpu_result_matrix).unwrap();
+    let time_reclaim = start_reclaim.elapsed();
+
+    let start_matrix = Instant::now();
+
+    let mut result_matrix = Matrix::new_from_row_major_vector(
+        reclaim, 
+        result_matrix_width, 
+        result_matrix_height
+    );
+
+    let time_matrix = start_matrix.elapsed();
+    let start_transpose = Instant::now();
+
+    result_matrix.transpose_non_skinny();
+
+    let time_transpose = start_transpose.elapsed();
+
+    println!("prep: {:?}, calc: {:?}, reclaim: {:?}, Matrix: {:?}, transpose: {:?}", time_prep, time_calc, time_reclaim,time_matrix,  time_transpose);
     
-//     let matrix_transformed = matrix.to_vec_collumn_major();
-//     let collumn_in_vector = collumn.to_vec();
+    result_matrix
+}
 
-//     let gpu_matrix= dev.htod_copy(matrix_transformed).unwrap();
-//     let gpu_input_collumn = dev.htod_copy(collumn_in_vector).unwrap();
-//     let mut gpu_result_collumn = dev.alloc_zeros::<T>(collumn_length).unwrap();
-
-//     let gemv_config: GemvConfig<T> = safe::GemvConfig {
-//         trans: sys::cublasOperation_t::CUBLAS_OP_N,
-//         m: matrix.height() as i32,
-//         n: matrix.width() as i32,
-//         alpha: NumCast::from(1).unwrap(),
-//         lda: matrix.height() as i32, // leading dimension: next collumn starts at this position
-//         incx: 1,
-//         beta: NumCast::from(0).unwrap(),
-//         incy: 1,
-//     };
-
-//     MatrixDotCollumnSystem { 
-//         gemv_config, 
-//         gpu_matrix, 
-//         gpu_input_collumn, 
-//         gpu_result_collumn }
-// }
 
 struct MatrixDotCollumnSystem<T> {
     gemv_config: GemvConfig<T>, 
@@ -280,13 +392,28 @@ pub enum Solver2DStrategy {
 // also find moments when Cholesky(root free) is applicable and maybe add in some tests/checks (maybe row swapping needed?: https://math.stackexchange.com/questions/4504209/when-does-a-real-symmetric-matrix-have-ldlt-decomposition-and-when-is-the
 // look around in gaus whether there are more optimizations.
 
+impl<T:MatrixValues> Add for Matrix<T> {
+    type Output = Self;
+
+    fn add(mut self, other_matrix: Self) -> Self::Output {
+        if !(self.height() == other_matrix.height() || self.width() == other_matrix.width()) {
+            panic!("Dimensions do not match for addition! Given [{}x{}] + [{}+{}]", self.height(), self.width(), other_matrix.height(), other_matrix.width());
+        }
+
+        self.addition_on_partial(0..self.height(), 0..self.width(), other_matrix);
+
+        self
+    }
+}
 
 pub struct Matrix<T: MatrixValues> {
     pub rows : Vec<Row<T>>
 }
 
-pub trait MatrixValues: Copy + Display + PartialEq + Num + NumCast{}
-impl<T> MatrixValues for T where T: Copy + Display + PartialEq + Num + NumCast {}
+pub trait MatrixValues: Copy + Display + PartialEq + Num + NumCast{
+}
+impl<T> MatrixValues for T where T: Copy + Display + PartialEq + Num + NumCast {
+}
 
 impl<T: MatrixValues> Matrix<T> {
     pub fn new_square_with_constant_values(n_rows:usize, value: T) -> Matrix<T> {
@@ -350,6 +477,23 @@ impl<T: MatrixValues> Matrix<T> {
         }
         new_matrix
     }
+    
+    pub fn new_from_row_major_vector(mut vector: Vec<T>, height: usize, width: usize) -> Self {
+        if !(vector.len() == height*width) {
+            panic!("Given dimensions do not match! Vec length: {}, height x width = {} x {} = {}", vector.len(), height, width, height*width);
+        }
+
+        let mut result_matrix: Matrix<T> = Matrix::new_with_constant_values(height, width, NumCast::from(0).unwrap());
+
+        for row_index in 0..height {
+            let row = Row::new_row_from_vec(
+                vector[row_index*width..(row_index+1)*width].to_owned()
+            );
+            result_matrix[row_index] = row;
+        }
+
+        result_matrix
+    }
 
     pub fn clone(&self) -> Matrix<T> {
         let mut rows = Vec::<Row<T>>::with_capacity(self.rows.len());
@@ -394,6 +538,38 @@ impl<T: MatrixValues> Matrix<T> {
         }
 
         zero_values_found
+    }
+
+    pub fn new_with_random_ones_chance(height: usize, width: usize, chance: f64, base_value: T) -> Self {
+        let mut result_matrix: Matrix<T> = Matrix::new_with_constant_values(height, width, base_value);
+        let mut rng = rand::thread_rng();
+        for row_index in 0..height {
+            for collumn_index in 0..width {
+                let random_value  = rng.gen_range(0.0..1.0);
+                
+                if random_value < chance {
+                    result_matrix[row_index][collumn_index] = NumCast::from(1).unwrap();
+                } else {
+                    result_matrix[row_index][collumn_index] = NumCast::from(0).unwrap();
+                }
+            }
+        }
+
+        result_matrix
+    }
+
+    pub fn remove_last_row(&mut self) -> &Self {
+        self.rows.pop().unwrap();
+
+        self
+    }
+
+    pub fn remove_last_collumn(&mut self) -> &Self {
+        for row_index in 0..self.height() {
+            self[row_index].cells.pop();
+        }
+
+        self
     }
 
     pub fn width(&self) -> usize {
@@ -480,7 +656,7 @@ impl<T: MatrixValues> Matrix<T> {
         }
     }
 
-    pub fn transpose_square(&mut self) {
+    pub fn transpose_square(&mut self) -> &Self {
         for row_index in 0..self.height()-1 {
             for collumn_index in row_index+1..self.width() {
                 let buffer = self[collumn_index][row_index];
@@ -488,6 +664,61 @@ impl<T: MatrixValues> Matrix<T> {
                 self[row_index][collumn_index] = buffer;
             }
         }
+        self
+    }
+
+    pub fn transpose_non_skinny(&mut self) -> &Self {
+        let initial_height = self.height();
+        let initial_width = self.width();
+        if initial_height == initial_width {
+            return self.transpose_square();
+        }
+
+        let smallest_dimension_was_height: bool;
+        let dimension_difference: usize = abs(initial_height as isize- initial_width as isize) as usize;
+        if initial_height < initial_width {
+            smallest_dimension_was_height = true;
+
+        } else {
+            smallest_dimension_was_height = false;
+        }
+
+
+        self.make_square();
+        self.transpose_square();
+
+
+        if smallest_dimension_was_height {
+            for _ in 0..dimension_difference {
+                self.remove_last_collumn();
+            }
+        } else {
+            for _ in 0..dimension_difference {
+                self.remove_last_row();
+            }
+        }
+
+        self
+    }
+
+    fn make_square(&mut self) -> &Self {
+        let initial_height = self.height();
+        let initial_width = self.width();
+
+        let dimension_difference = abs(initial_height as isize - initial_width as isize) as usize;
+        if initial_height == initial_width {
+            return  self;
+        } else if initial_height < initial_width {
+            for _ in 0..dimension_difference {
+                self.append_row_zeros();
+            }
+        } else {
+            for _ in 0..dimension_difference {
+                self.append_collumn_zeros();
+            }
+        }
+
+        self
     }
 
     pub fn add_row(&mut self, insert_row_at: usize, new_row: Row<T>) {
@@ -507,15 +738,50 @@ impl<T: MatrixValues> Matrix<T> {
             self.rows.push(new_row);
     }
 
+    pub fn append_row_zeros(&mut self) {
+        let width = self.width();
+        self.rows.push( Row::new_row_with_constant_values(width, NumCast::from(0).unwrap()));
+    }
+
+    pub fn append_collumn_zeros(&mut self) {
+        let height = self.height();
+        let zero: T = NumCast::from(0).unwrap();
+        let collumn= Collumn::new_form_vec((0..height).into_iter().map(|x| zero).collect::<Vec<T>>());
+        self.append_collumn(collumn);
+    }
+
+    pub fn append_collumn_zeros_n_times(&mut self, n: usize) {
+        let height = self.height();
+        let zero: T = NumCast::from(0).unwrap();
+        let collumn= Collumn::new_form_vec((0..height).into_iter().map(|x| zero).collect::<Vec<T>>());
+        for _ in 0..n{
+            self.append_collumn(collumn.clone());
+        }
+    }
+
+    pub fn append_collumn(&mut self, collumn: Collumn<T>) -> &Self {
+        if !(self.height() == collumn.height()) {
+            panic!("Collumn dimensions do not match, given collumn is {} long, current matrix is {} long.", collumn.height(), self.height())
+        }
+
+        for row_index in 0..self.height() {
+            self[row_index].cells.push(collumn[row_index]);
+        }
+
+        self
+    }
+
     pub fn append_row_from_vec(&mut self, new_row_vec: Vec<T>) {
         let new_row = Row::new_row_from_vec(new_row_vec);
         self.append_row(new_row);
     }
 
-    pub fn multiply_all_elements_by(&mut self, factor: T) {
+    pub fn multiply_all_elements_by(&mut self, factor: T) -> &Self {
         for row_number in 0..self.rows.len() {
-            self.rows[row_number].multiply_all_elements_by(factor)
+            self.rows[row_number].multiply_all_elements_by(factor);
         }
+
+        self
     }
 
     pub fn divide_all_elements_by(&mut self, factor: T) {
@@ -638,11 +904,11 @@ fn solve_with_cholesky_quare_root_free_decomposition<T: MatrixValues>(mut system
         // create values under the diagonal of the L matrix
         // similtaniously substract the row if we are here anyway
         for row_number in diagonal_index+1..matrix_size {
-            if !(A_matrix[row_number][diagonal_index] == NumCast::from(0).unwrap()) { // checking for zero values will significantly reduce time for sparse matrices, add 1/2 * n comparisons for dense.
+            // if !(A_matrix[row_number][diagonal_index] == NumCast::from(0).unwrap()) { // checking for zero values will significantly reduce time for sparse matrices, add 1/2 * n comparisons for dense.
                 let value_under_diagonal = A_matrix[row_number][diagonal_index] / A_matrix[diagonal_index][diagonal_index];
                 L[row_number][diagonal_index] = value_under_diagonal;
                 A_matrix.substract_multiplied_internal_row_from_row_by_index(diagonal_index, value_under_diagonal, row_number) // upto row_number becuase this is the same as the diagonal, range should also include the diagonal so plus 1
-            }
+            // }
         }
 
         // all values under the pivot should be zero: collumn operations is trivial -> just set values to 0
@@ -658,9 +924,9 @@ fn solve_with_cholesky_quare_root_free_decomposition<T: MatrixValues>(mut system
     // adding transpose of L onto itself so no second matrix needs to be created
     for row_index in 0..matrix_size-1{
         for column_index in row_index+1..matrix_size {
-            if !(L[column_index][row_index] == NumCast::from(0).unwrap()){
+            // if !(L[column_index][row_index] == NumCast::from(0).unwrap()){
             L[row_index][column_index] = L[column_index][row_index];
-            }
+            // }
         }
     }
     let time_Ltrans = start_Ltrans.elapsed();
@@ -685,10 +951,10 @@ fn solve_with_cholesky_quare_root_free_decomposition<T: MatrixValues>(mut system
     for collumn_index in 0..matrix_size-1 { // last downwards sweep is trivial
         for row_index in collumn_index+1..matrix_size{
             let factor = L[collumn_index][row_index];
-            if !(factor == NumCast::from(0).unwrap()){
+            // if !(factor == NumCast::from(0).unwrap()){
                 L.substract_multiplied_internal_row_from_row_by_index_with_collumn_range(collumn_index, factor, row_index, 0..collumn_index+1);
                 B_matrix.substract_multiplied_internal_row_from_row_by_index(collumn_index, factor, row_index);
-            }
+            // }
 
         }
     }
@@ -713,10 +979,10 @@ fn solve_with_cholesky_quare_root_free_decomposition<T: MatrixValues>(mut system
             row_range.reverse();
             for row_index in row_range {
                 let factor = L[row_index][collumn_index];                
-                if !(factor == NumCast::from(0).unwrap()){
+                // if !(factor == NumCast::from(0).unwrap()){
                     L.substract_multiplied_internal_row_from_row_by_index_with_collumn_range(collumn_index, factor, row_index, (row_index+1..collumn_index).rev().collect::<Vec<usize>>());
                     B_matrix.substract_multiplied_internal_row_from_row_by_index(collumn_index, factor, row_index);
-                }
+                // }
 
             }
     }
@@ -880,6 +1146,50 @@ impl<T: MatrixValues> Matrix<T> {
         }
     }
 
+    pub fn addition_on_partial<U, V, W>(&mut self, rows: U, colls: V, new_values: W) 
+    where  U: InputTraitRowCol<U>,
+    V: InputTraitRowCol<V>,
+    W: InputMatrix<W, T>
+    {
+        let rows_input:Vec<usize> = parse_dimension_input(rows);
+        let colls_input:Vec<usize> = parse_dimension_input(colls);
+        let matrix_input:Matrix<T> = parse_matrix_input(new_values);
+
+        // checking whether input matrix matches given dimensions:
+
+        if !(rows_input.len() == matrix_input.coll_length()) {
+            println!("Error: Given row range does not match given values ");
+            println!("Specified length = {:?}, given matrix is = {:?}", rows_input.len(), matrix_input.coll_length());
+            panic!()
+        } else if !(colls_input.len() == matrix_input.row_length()) {
+            println!("Error: Given collumn range does not match given values ");
+            panic!()
+        }
+
+        let mut i : usize = 0;
+        let mut j : usize = 0;
+        for row in &rows_input {
+            j = 0; // seems like i missed this, not 100% sure.
+            for coll in &colls_input {
+                self[*row][*coll] = self[*row][*coll] + matrix_input[i][j];
+                j += 1;
+            }
+            i += 1;
+        }
+    }
+
+    pub fn addition_total(&mut self, other_matrix: &Matrix<T>) -> &Self {
+        if !(self.height() == other_matrix.height() || self.width() == other_matrix.width()) {
+            panic!("Dimensions do not match for addition! Given [{}x{}] + [{}+{}]", self.height(), self.width(), other_matrix.height(), other_matrix.width());
+        }
+
+        for row_index in 0..self.height() {
+            self[row_index].addition_row_with_external_row(&other_matrix[row_index]);
+        }
+
+        self
+    }
+
     pub fn multiply_selected_values_with_factor<U, V>(&mut self, rows: U, colls: V, factor: T)
     where  U: InputTraitRowCol<U>,
     V: InputTraitRowCol<V>, 
@@ -930,6 +1240,10 @@ impl<T: MatrixValues> Row<T> {
         Row { cells: input_vec }
     }
 
+    pub fn new_row_with_constant_values(width: usize, value: T) -> Row<T> {
+        return Row::new_row_with_value(width, value)
+    }
+
     pub fn len(&self) -> usize {
         self.cells.len()
     }
@@ -948,19 +1262,31 @@ impl<T: MatrixValues> Row<T> {
 
     pub fn divide_all_elements_by(&mut self, value: T) {
         for n in 0..self.cells.len() {
-            if !(self.cells[n] == NumCast::from(0).unwrap()) {// quickly tested on some sparse matrices but seem to really boost performance. In some more filled ones: around 50x improvemnt, ful matrix not tested yet
+            // if !(self.cells[n] == NumCast::from(0).unwrap()) {// quickly tested on some sparse matrices but seem to really boost performance. In some more filled ones: around 50x improvemnt, ful matrix not tested yet
                 self.cells[n] = self.cells[n] / value;
-            }
+            // }
         }
     }
 
-    pub fn multiply_all_elements_by(&mut self, value: T) {
+    pub fn multiply_all_elements_by(&mut self, value: T) -> &Self{
         for n in 0..self.cells.len() {
-            if !(self.cells[n] == NumCast::from(0).unwrap()) {// quickly tested on some sparse matrices but seem to really boost performance. In some more filled ones: around 50x improvemnt, ful matrix not tested yet
+            // if !(self.cells[n] == NumCast::from(0).unwrap()) {// quickly tested on some sparse matrices but seem to really boost performance. In some more filled ones: around 50x improvemnt, ful matrix not tested yet
             self.cells[n] = self.cells[n] * value;
-            }
+            // }
+        }
+
+        self
+    }
+
+    pub fn addition_row_with_external_row(&mut self, row_to_add_to_this_one:& Row<T>) {
+        for n in 0..self.cells.len() {
+            // if !(self.cells[n] == NumCast::from(0).unwrap() && row_to_add_to_this_one.cells[n] == NumCast::from(0).unwrap()) {
+                self.cells[n] = self.cells[n] + row_to_add_to_this_one[n];
+            // }
         }
     }
+
+    
 
     pub fn normalize_all_elements_to_element(&mut self, index: usize) {
         self.divide_all_elements_by(self[index]);
@@ -975,9 +1301,9 @@ impl<T: MatrixValues> Row<T> {
             panic!("Error: Length of substracting row is not equal to row length")
         }
         for cell_number in 0..self.cells.len() {
-            if !(self[cell_number] == NumCast::from(0).unwrap() || substraction_row[cell_number] == NumCast::from(0).unwrap()) { // quickly tested on some sparse matrices but seem to really boost performance . In some more filled ones: around 50x improvemnt, ful matrix not tested yet
+            // if !(self[cell_number] == NumCast::from(0).unwrap() || substraction_row[cell_number] == NumCast::from(0).unwrap()) { // quickly tested on some sparse matrices but seem to really boost performance . In some more filled ones: around 50x improvemnt, ful matrix not tested yet
             self[cell_number] = self[cell_number] - substraction_row[cell_number];
-            }
+            // }
         }
     }
 
