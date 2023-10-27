@@ -26,7 +26,7 @@ use tokio;
 use tokio::task::JoinHandle;
 use pollster::{self, FutureExt};
 
-const N_THREADS: usize = 8;
+const N_THREADS: usize = 1;
 
 struct ThreadingControllerSubstractFullRows<T: MatrixValues> {
     row_to_substract_with: Vec<Arc<RwLock<Row<T>>>>,
@@ -57,9 +57,14 @@ impl<T: MatrixValues> ThreadingControllerSubstractFullRows<T>{
 
     fn block_untill_done(&mut self)  {
         let previous_length = self.running_threads.len();
+        // println!("now its a waiting game");
         for thread in &mut self.running_threads{
             thread.block_on().unwrap();
         }
+        // println!("now that was over in a jiffy!");
+        self.row_to_substract_with = Vec::<Arc<RwLock<Row<T>>>>::with_capacity(previous_length);
+        self.factor = Vec::<T>::with_capacity(previous_length);
+        self.from_row = Vec::<Arc<RwLock<Row<T>>>>::with_capacity(previous_length);
         self.running_threads = Vec::<JoinHandle<()>>::with_capacity(previous_length);
     }
 
@@ -89,15 +94,15 @@ impl<T: MatrixValues> ThreadingControllerSubstractFullRows<T>{
                     );
                     running_total += number_of_rows_per_worker;
                 } else {
-                    let upper_limit = n_rows_to_substract - running_total;
+                    let number_of_tasks_for_this_thread = n_rows_to_substract - running_total;
                     self.tokio_runtime.spawn(
                         substract_row_x_factor_from_row(
-                            self.row_to_substract_with[running_total..running_total+number_of_rows_per_worker].to_vec(), 
-                            self.factor[running_total..running_total+number_of_rows_per_worker].to_vec(),
-                            self.from_row[running_total..running_total+number_of_rows_per_worker].to_vec(),
+                            self.row_to_substract_with[running_total..running_total+number_of_tasks_for_this_thread].to_vec(), 
+                            self.factor[running_total..running_total+number_of_tasks_for_this_thread].to_vec(),
+                            self.from_row[running_total..running_total+number_of_tasks_for_this_thread].to_vec(),
                         )
                     );
-                    running_total += upper_limit - running_total;
+                    running_total += number_of_tasks_for_this_thread;
                 }
             }
         }
@@ -993,6 +998,8 @@ fn solve_with_guass<T: MatrixValues>(system_of_equations: Solver2D<T>) -> Solved
             // A_matrix.substract_multiplied_internal_row_from_row_by_index(working_row, factor_of_substraction, row_number_of_other_row);
             // B_matrix.substract_multiplied_internal_row_from_row_by_index(working_row, factor_of_substraction, row_number_of_other_row);
         }
+
+        threading.start_working();
 
         threading.block_untill_done();
 
