@@ -33,12 +33,12 @@ struct ThreadingController {
 }
 impl ThreadingController{
     fn new() -> Self {
-        let tokio_runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(16).build().unwrap();
+        let tokio_runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(8).build().unwrap();
         ThreadingController { running_threads: Vec::<JoinHandle<()>>::new(), tokio_runtime}
     }
 
     fn with_capacity(capacity: usize) -> Self {
-        let tokio_runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(16).build().unwrap();
+        let tokio_runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(8).build().unwrap();
         ThreadingController { running_threads: Vec::<JoinHandle<()>>::with_capacity(capacity), tokio_runtime}
     }
 
