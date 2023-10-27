@@ -91,7 +91,7 @@ pub fn matrix_dot_collumn<T: MatrixValues>(matrix: & Matrix<T>, collumn: & Collu
     let mut result_collumn: Collumn<T> = Collumn::new_with_constant_values(matrix.height(), NumCast::from(0).unwrap());
 
     for row_number in 0..matrix.height() {
-        result_collumn[row_number] = row_dot_collumn(& matrix[row_number], & collumn);
+        result_collumn[row_number] = row_dot_collumn(& matrix[row_number].read().unwrap(), & collumn);
     }
 
     result_collumn
@@ -112,7 +112,7 @@ pub fn matrix_add_matrix<T: MatrixValues>(mut A_matrix: Matrix<T>, B_matrix:& Ma
     let M = A_matrix.width();
 
     for row_index in 0..N {
-        A_matrix[row_index].addition_row_with_external_row(&B_matrix[row_index]);
+        A_matrix[row_index].write().unwrap().addition_row_with_external_row(&B_matrix[row_index].read().unwrap());
     }
 
     A_matrix
@@ -132,7 +132,7 @@ pub fn matrix_dot_matrix<T: MatrixValues>(A_matrix:& Matrix<T>, B_matrix:& Matri
 
     for row_index in 0..C_matrix.height() {
         for collumn_index in 0..C_matrix.width() {
-            C_matrix[row_index][collumn_index] = row_dot_collumn(&A_matrix[row_index], &B_matrix.get_collumn(collumn_index))
+            C_matrix[row_index].write().unwrap()[collumn_index] = row_dot_collumn(&A_matrix[row_index].read().unwrap(), &B_matrix.get_collumn(collumn_index))
         }
     }
 
@@ -468,7 +468,7 @@ impl<T: MatrixValues> Matrix<T> {
         println!("creating fixed ");
         let mut new_matrix: Matrix<T> = Matrix::new_square_with_constant_values(size, NumCast::from(0).unwrap());
         for j in 0..size {
-            new_matrix[j][j] = values_of_diagonal;
+            new_matrix[j].write().unwrap()[j] = values_of_diagonal;
         }
         new_matrix
     }
@@ -484,7 +484,7 @@ impl<T: MatrixValues> Matrix<T> {
         }
 
         for j in 0..smallest_value {
-            new_matrix[j][j] = values_of_diagonal;
+            new_matrix[j].write().unwrap()[j] = values_of_diagonal;
         }
         new_matrix
     }
@@ -497,10 +497,10 @@ impl<T: MatrixValues> Matrix<T> {
         let mut result_matrix: Matrix<T> = Matrix::new_with_constant_values(height, width, NumCast::from(0).unwrap());
 
         for row_index in 0..height {
-            let row = Row::new_row_from_vec(
-                vector[row_index*width..(row_index+1)*width].to_owned()
-            );
-            result_matrix[row_index] = row;
+            // let row = Row::new_row_from_vec(
+            //     vector[row_index*width..(row_index+1)*width].to_owned()
+            // );
+            result_matrix[row_index].write().unwrap().cells = vector[row_index*width..(row_index+1)*width].to_owned();
         }
 
         result_matrix
@@ -509,7 +509,7 @@ impl<T: MatrixValues> Matrix<T> {
     pub fn clone(&self) -> Matrix<T> {
         let mut rows = Vec::<Arc<RwLock<Row<T>>>>::with_capacity(self.rows.len());
         for row in &self.rows{
-            rows.push( row.clone());
+            rows.push( Arc::new(RwLock::new(row.read().unwrap().clone())));
         }
         Matrix { rows }
     }
@@ -543,7 +543,7 @@ impl<T: MatrixValues> Matrix<T> {
 
         let mut zero_values_found = false;
         for j in 0..smallest_dimension {
-            if self[j][j] == NumCast::from(0).unwrap() {
+            if self[j].read().unwrap()[j] == NumCast::from(0).unwrap() {
                 zero_values_found = true
             }
         }
@@ -559,9 +559,9 @@ impl<T: MatrixValues> Matrix<T> {
                 let random_value  = rng.gen_range(0.0..1.0);
                 
                 if random_value < chance {
-                    result_matrix[row_index][collumn_index] = NumCast::from(1).unwrap();
+                    result_matrix[row_index].write().unwrap()[collumn_index] = NumCast::from(1).unwrap();
                 } else {
-                    result_matrix[row_index][collumn_index] = NumCast::from(0).unwrap();
+                    result_matrix[row_index].write().unwrap()[collumn_index] = NumCast::from(0).unwrap();
                 }
             }
         }
@@ -577,7 +577,7 @@ impl<T: MatrixValues> Matrix<T> {
 
     pub fn remove_last_collumn(&mut self) -> &Self {
         for row_index in 0..self.height() {
-            self[row_index].cells.pop();
+            self[row_index].write().unwrap().cells.pop();
         }
 
         self
@@ -602,7 +602,7 @@ impl<T: MatrixValues> Matrix<T> {
     pub fn get_collumn(&self, coll_number : usize) -> Collumn<T> {
         let mut cells = Vec::<T>::with_capacity(self.coll_length());
         for row_number in 0..self.coll_length(){
-            cells.push( self[row_number][coll_number])
+            cells.push( self[row_number].read().unwrap()[coll_number])
         }
         Collumn {cells}
     }
@@ -613,7 +613,7 @@ impl<T: MatrixValues> Matrix<T> {
 
         for column_number in 0..self.width() {
             for row_number in 0..self.height() {
-                output_vec.push(self[row_number][column_number]);
+                output_vec.push(self[row_number].read().unwrap()[column_number]);
             }
         }
 
@@ -625,7 +625,7 @@ impl<T: MatrixValues> Matrix<T> {
         let mut output_vec = Vec::<T>::with_capacity(N);
 
         for row_number in 0..self.height() {
-            output_vec.extend(self[row_number].cells.clone());
+            output_vec.extend(self[row_number].read().unwrap().cells.clone());
         }
 
         output_vec
@@ -640,21 +640,22 @@ impl<T: MatrixValues> Matrix<T> {
 
     pub fn substract_internal_row_from_row_by_index(&mut self, row_number_to_substract: usize, from_row_number: usize) {
         let row_to_substract = self[row_number_to_substract].clone();
-        self[from_row_number].substract_row(row_to_substract)
+        self[from_row_number].write().unwrap().substract_row(row_to_substract)
     }
 
     pub fn substract_multiplied_internal_row_from_row_by_index(&mut self, row_number_to_substract_with: usize, factor: T , from_row_number: usize) {
-        let mut mutliplied_row_to_substract = self[row_number_to_substract_with].clone();
+        let mut mutliplied_row_to_substract = self[row_number_to_substract_with].read().unwrap().clone();
         mutliplied_row_to_substract.multiply_all_elements_by(factor);
-        self[from_row_number].substract_row(mutliplied_row_to_substract)
+        self[from_row_number].write().unwrap().substract_row(Arc::new(RwLock::new(mutliplied_row_to_substract)))
     }
 
     pub fn substract_multiplied_internal_row_from_row_by_index_with_collumn_range<U>(&mut self, row_number_to_substract_with: usize, factor: T , from_row_number: usize, collumn_range: U)
     where  U: InputTraitRowCol<U> {
         let colls_input:Vec<usize> = parse_dimension_input(collumn_range);
-
+        let mut row_to_subtract_on = self[from_row_number].write().unwrap();
+        let row_to_substract_with  = self[row_number_to_substract_with].read().unwrap();
         for collumn_index in colls_input.iter(){
-            self[from_row_number][*collumn_index] = self[from_row_number][*collumn_index] - self[row_number_to_substract_with][*collumn_index] * factor
+            row_to_subtract_on[*collumn_index] = row_to_subtract_on[*collumn_index] - row_to_substract_with[*collumn_index] * factor
         }  
     }
 
@@ -669,10 +670,13 @@ impl<T: MatrixValues> Matrix<T> {
 
     pub fn transpose_square(&mut self) -> &Self {
         for row_index in 0..self.height()-1 {
+            let mut row_1 = self[row_index].write().unwrap();
+            
             for collumn_index in row_index+1..self.width() {
-                let buffer = self[collumn_index][row_index];
-                self[collumn_index][row_index] = self[row_index][collumn_index];
-                self[row_index][collumn_index] = buffer;
+                let mut row_2 = self[collumn_index].write().unwrap();
+                let buffer = row_2[row_index];
+                row_2[row_index] = row_1[collumn_index];
+                row_1[collumn_index] = buffer;
             }
         }
         self
@@ -776,7 +780,7 @@ impl<T: MatrixValues> Matrix<T> {
         }
 
         for row_index in 0..self.height() {
-            self[row_index].cells.push(collumn[row_index]);
+            self[row_index].write().unwrap().cells.push(collumn[row_index]);
         }
 
         self
@@ -841,18 +845,18 @@ fn solve_with_guass<T: MatrixValues>(system_of_equations: Solver2D<T>) -> Solved
             B_matrix.swap_rows(working_row, first_nonzero_row);
         }
 
-        let normalize_factor = A_matrix[working_row][working_collumn];
-        B_matrix[working_row].divide_all_elements_by(normalize_factor);
-        A_matrix[working_row].normalize_all_elements_to_element(working_collumn); // normalize all values in the row to the pivot so in the end Identity matrix is reached
+        let normalize_factor = A_matrix[working_row].read().unwrap()[working_collumn];
+        B_matrix[working_row].write().unwrap().divide_all_elements_by(normalize_factor);
+        A_matrix[working_row].write().unwrap().normalize_all_elements_to_element(working_collumn); // normalize all values in the row to the pivot so in the end Identity matrix is reached
 
         // substract current row from all other rows to eliminate variable
         for row_number_of_other_row in (0..A_matrix.rows.len()).filter(|index| !(*index == working_row)) {
             // skip substraction of value in this row is already zero, save computational time
             
-            if A_matrix[row_number_of_other_row][working_collumn] == NumCast::from(0).unwrap() {
+            if A_matrix[row_number_of_other_row].read().unwrap()[working_collumn] == NumCast::from(0).unwrap() {
                 continue;
             }
-            let factor_of_substraction = A_matrix[row_number_of_other_row][working_collumn] / A_matrix[working_row][working_collumn];
+            let factor_of_substraction = A_matrix[row_number_of_other_row].read().unwrap()[working_collumn] / A_matrix[working_row].read().unwrap()[working_collumn];
             A_matrix.substract_multiplied_internal_row_from_row_by_index(working_row, factor_of_substraction, row_number_of_other_row);
             B_matrix.substract_multiplied_internal_row_from_row_by_index(working_row, factor_of_substraction, row_number_of_other_row);
         }
@@ -910,32 +914,130 @@ fn async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range<
 
 
 fn solve_with_cholesky_quare_root_free_decomposition<T: MatrixValues+ std::marker::Send + std::marker::Sync>(mut system_of_equations: Solver2D<T>) -> Solved2D<T> {
-    // this function consumes A and B
-    let start_assign = Instant::now();
-    let mut A_matrix = system_of_equations.A_matrix;
-    let mut B_matrix = system_of_equations.B_matrix;
-    let time_assign = start_assign.elapsed();
+    todo!()
+    // // this function consumes A and B
+    // let start_assign = Instant::now();
+    // let mut A_matrix = system_of_equations.A_matrix;
+    // let mut B_matrix = system_of_equations.B_matrix;
+    // let time_assign = start_assign.elapsed();
 
 
-    let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(16).build().unwrap();
+    // let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(16).build().unwrap();
 
-    if !(A_matrix.is_square()) {
-        panic!("If a matrix aint square it cant be symmetric -> given A matrix not square")
-    }
+    // if !(A_matrix.is_square()) {
+    //     panic!("If a matrix aint square it cant be symmetric -> given A matrix not square")
+    // }
 
-    let matrix_size = A_matrix.len();
+    // let matrix_size = A_matrix.len();
 
-    let start_Lmake = Instant::now();
+    // let start_Lmake = Instant::now();
 
-    let mut L: Matrix<T> = Matrix::new_square_eye(matrix_size, NumCast::from(1).unwrap());
-    let time_Lmake_1 = start_Lmake.elapsed();
+    // let mut L: Matrix<T> = Matrix::new_square_eye(matrix_size, NumCast::from(1).unwrap());
+    // let time_Lmake_1 = start_Lmake.elapsed();
 
-    let test1 = Instant::now();
-    let x = Matrix::new_square_with_constant_values(matrix_size, 0.1 as f64);
-    let time_test1 = test1.elapsed();
-    println!("time test 1 {:?}", time_test1);
+    // let test1 = Instant::now();
+    // let x = Matrix::new_square_with_constant_values(matrix_size, 0.1 as f64);
+    // let time_test1 = test1.elapsed();
+    // println!("time test 1 {:?}", time_test1);
 
-    // async fn async_substract_multiplied_internal_row_from_row_by_index<T: MatrixValues>(row_to_substract_with: & Row<T>, factor: T, from_row: Row<T>, from_row_number: usize) -> (Row<T>, usize) {
+    // // async fn async_substract_multiplied_internal_row_from_row_by_index<T: MatrixValues>(row_to_substract_with: & Row<T>, factor: T, from_row: Row<T>, from_row_number: usize) -> (Row<T>, usize) {
+    // //     let mut result_vec = Vec::<T>::with_capacity(row_to_substract_with.len());
+
+    // //     for j in 0..row_to_substract_with.len() {
+    // //         result_vec.push(from_row[j] - row_to_substract_with[j] * factor)
+    // //     }
+
+    // //     (Row::new_row_from_vec(result_vec), from_row_number)
+    // // }
+
+    // async fn solver_async_substract_multiplied_internal_row_from_row_by_index<T: MatrixValues>(A_matrix: Arc<RwLock<Matrix<T>>>, row_number_to_substract_with: usize, factor:T, from_row_number: usize) {
+    //     // A_matrix.substract_multiplied_internal_row_from_row_by_index(row_number_to_substract_with, factor, from_row_number);
+    //     // let x = A_matrix.into_raw().read().read().unwrap()
+        
+    //     let row_1_arc = A_matrix.clone().read().unwrap().rows[row_number_to_substract_with].clone();
+    //     let row_2_arc = A_matrix.read().unwrap().rows[from_row_number].clone();
+
+    //     async_substract_multiplied_internal_row_from_row_by_index(row_1_arc, factor, row_2_arc);
+    //     // let x  = A_matrix.;
+    // }
+
+    // async fn solver_async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range<T: MatrixValues>(A_matrix: Arc<RwLock<Matrix<T>>>, row_number_to_substract_with: usize, factor:T, from_row_number: usize, collumn_range:Range<usize>) {
+    //     // A_matrix.substract_multiplied_internal_row_from_row_by_index(row_number_to_substract_with, factor, from_row_number);
+    //     let row_1_arc = A_matrix.clone().read().unwrap().rows[row_number_to_substract_with].clone();
+    //     let row_2_arc = A_matrix.read().unwrap().rows[from_row_number].clone();
+
+    //     async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range(row_1_arc, factor, row_2_arc, collumn_range);
+    //     // let x  = A_matrix.;
+    // }
+
+    // // async fn solver_async_divide_all_elements_by<T: MatrixValues>(A_matrix: Arc<RwLock<Matrix<T>>>, row_number_to_divide: usize, factor: T) {
+
+    // // }
+
+    // let A_matrix_height = A_matrix.height();
+    // let mut A_matrix_arc = Arc::new(RwLock::new(A_matrix));
+
+    // for diagonal_index in 0..matrix_size {
+    //     // if A_matrix[diagonal_index][diagonal_index] == NumCast::from(0).unwrap() {
+    //     //     panic!("ERROR! found zero value at diagonal");
+    //     // }
+    //     let mut handle_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
+
+    //     // let row_copy: Row<T> = A_matrix[diagonal_index];
+    //     // create values under the diagonal of the L matrix
+    //     // similtaniously substract the row if we are here anyway
+    //     for row_number in diagonal_index+1..matrix_size {
+    //         // if !(A_matrix[row_number][diagonal_index] == NumCast::from(0).unwrap()) { // checking for zero values will significantly reduce time for sparse matrices, add 1/2 * n comparisons for dense.
+    //             let value_under_diagonal = A_matrix_arc.read().unwrap()[row_number][diagonal_index] / A_matrix_arc.read().unwrap()[diagonal_index][diagonal_index];
+    //             L[row_number][diagonal_index] = value_under_diagonal;
+    //             // handle_vec.push(runtime.spawn(A_matrix(&A_matrix[diagonal_index], value_under_diagonal, A_matrix[row_number].clone(), row_number)));
+    //             handle_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index(A_matrix_arc.clone(), diagonal_index, value_under_diagonal, row_number)))
+    //             // handle_vec.push(runtime.spawn(A_matrix.substract_multiplied_internal_row_from_row_by_index(diagonal_index, value_under_diagonal, row_number))) // upto row_number becuase this is the same as the diagonal, range should also include the diagonal so plus 1
+    //         // }
+    //     }
+
+    //     for task in handle_vec {
+    //         let _ = task.block_on().unwrap();
+    //     }
+
+    //     // all values under the pivot should be zero: collumn operations is trivial -> just set values to 0
+    //     // Hypothesis: this is redundadnt
+    //     // for collumn_number in diagonal_index+1..matrix_size {
+    //     //     A_matrix[diagonal_index][collumn_number] = NumCast::from(0).unwrap();
+    //     // }
+
+    // }
+
+    // let time_Lmake = start_Lmake.elapsed() - time_Lmake_1;
+
+    // let start_Ltrans = Instant::now();
+    // // adding transpose of L onto itself so no second matrix needs to be created
+    // for row_index in 0..matrix_size-1{
+    //     for column_index in row_index+1..matrix_size {
+    //         // if !(L[column_index][row_index] == NumCast::from(0).unwrap()){
+    //         L[row_index][column_index] = L[column_index][row_index];
+    //         // }
+    //     }
+    // }
+    // let time_Ltrans = start_Ltrans.elapsed();
+    // // let mut Lt = L.clone();
+    // // let Lt: () = L.transpose_square();
+
+    // // let sol_1 = Matrix::new_from_solver(Solver2D { A_matrix: L.clone() , B_matrix: B_matrix.clone(), solver: Solver2DStrategy::Guass });
+
+    // // let mut D: Matrix<T> = Matrix::new_square_eye(matrix_size, NumCast::from(1).unwrap());
+    // // for diag_index in 0..matrix_size {
+    // //     D[diag_index][diag_index] = A_matrix[diag_index][diag_index];
+    // // }
+
+    // // let sol_2 = Matrix::new_from_solver(Solver2D { A_matrix: D, B_matrix: sol_1.B_matrix, solver: Solver2DStrategy::Guass });
+
+    // // L.transpose_square();
+
+    // // let sol_3 = Matrix::new_from_solver(Solver2D { A_matrix: L, B_matrix: sol_2.B_matrix, solver: Solver2DStrategy::Guass });
+    // // sol_3
+
+    // async fn substract_B_async<T: MatrixValues>(row_to_substract_with: Row<T>, factor: T, from_row: Row<T>, from_row_number: usize) -> (Row<T>, usize) {
     //     let mut result_vec = Vec::<T>::with_capacity(row_to_substract_with.len());
 
     //     for j in 0..row_to_substract_with.len() {
@@ -944,187 +1046,90 @@ fn solve_with_cholesky_quare_root_free_decomposition<T: MatrixValues+ std::marke
 
     //     (Row::new_row_from_vec(result_vec), from_row_number)
     // }
+    
+    // let start_mat1 = Instant::now();
 
-    async fn solver_async_substract_multiplied_internal_row_from_row_by_index<T: MatrixValues>(A_matrix: Arc<RwLock<Matrix<T>>>, row_number_to_substract_with: usize, factor:T, from_row_number: usize) {
-        // A_matrix.substract_multiplied_internal_row_from_row_by_index(row_number_to_substract_with, factor, from_row_number);
-        // let x = A_matrix.into_raw().read().read().unwrap()
-        
-        let row_1_arc = A_matrix.clone().read().unwrap().rows[row_number_to_substract_with].clone();
-        let row_2_arc = A_matrix.read().unwrap().rows[from_row_number].clone();
+    // let B_matrix_arc = Arc::new(RwLock::new(B_matrix));
+    // let L_arc = Arc::new(RwLock::new(L));
 
-        async_substract_multiplied_internal_row_from_row_by_index(row_1_arc, factor, row_2_arc);
-        // let x  = A_matrix.;
-    }
+    // for collumn_index in 0..matrix_size-1 { // last downwards sweep is trivial
 
-    async fn solver_async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range<T: MatrixValues>(A_matrix: Arc<RwLock<Matrix<T>>>, row_number_to_substract_with: usize, factor:T, from_row_number: usize, collumn_range:Range<usize>) {
-        // A_matrix.substract_multiplied_internal_row_from_row_by_index(row_number_to_substract_with, factor, from_row_number);
-        let row_1_arc = A_matrix.clone().read().unwrap().rows[row_number_to_substract_with].clone();
-        let row_2_arc = A_matrix.read().unwrap().rows[from_row_number].clone();
+    //     let mut handle_B_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
+    //     let mut handle_L_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
 
-        async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range(row_1_arc, factor, row_2_arc, collumn_range);
-        // let x  = A_matrix.;
-    }
+    //     for row_index in collumn_index+1..matrix_size{
+    //         let factor = L[collumn_index][row_index];
+    //         // if !(factor == NumCast::from(0).unwrap()){
+    //             // L.substract_multiplied_internal_row_from_row_by_index_with_collumn_range(collumn_index, factor, row_index, 0..collumn_index+1);
+    //             // B_matrix.substract_multiplied_internal_row_from_row_by_index(collumn_index, factor, row_index);
 
-    // async fn solver_async_divide_all_elements_by<T: MatrixValues>(A_matrix: Arc<RwLock<Matrix<T>>>, row_number_to_divide: usize, factor: T) {
+    //             handle_L_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range(L_arc.clone(), collumn_index, factor, row_index, 0..collumn_index+1)));
+    //             handle_B_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index(B_matrix_arc.clone(), collumn_index, factor, row_index)));
+
+    //     }
+
+    //     for task in handle_B_vec {
+    //         let _ = task.block_on().unwrap();
+    //     }
+
+    //     for task in handle_L_vec {
+    //         let _ = task.block_on().unwrap();
+    //     }
+    // }
+    // let time_mat1 = start_mat1.elapsed();
+
+    // let start_mat2 = Instant::now();
+
+
+    // let A_matrix = Arc::try_unwrap(A_matrix_arc).unwrap().into_inner().unwrap();
+    // let mut B_matrix = Arc::try_unwrap(B_matrix_arc).unwrap().into_inner().unwrap();
+    
+    // // do diagonal part of D (called A here)
+    // for diagonal_index in 0..matrix_size {
+    //     if !(A_matrix[diagonal_index][diagonal_index] == NumCast::from(0).unwrap()) {
+    //         B_matrix[diagonal_index].divide_all_elements_by(A_matrix[diagonal_index][diagonal_index]);
+    //     }
 
     // }
+    // let time_mat2 = start_mat2.elapsed();
+    // // do upward sweep of L_t
 
-    let A_matrix_height = A_matrix.height();
-    let mut A_matrix_arc = Arc::new(RwLock::new(A_matrix));
+    // let B_matrix_arc = Arc::new(RwLock::new(B_matrix));
 
-    for diagonal_index in 0..matrix_size {
-        // if A_matrix[diagonal_index][diagonal_index] == NumCast::from(0).unwrap() {
-        //     panic!("ERROR! found zero value at diagonal");
-        // }
-        let mut handle_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
+    // let start_mat3 = Instant::now();
+    // let mut coll_range = (1..matrix_size).collect::<Vec<usize>>();
+    // coll_range.reverse();
+    //     for collumn_index in coll_range {
+    //         let mut row_range = (0..=collumn_index-1).collect::<Vec<usize>>();
+    //         row_range.reverse();
 
-        // let row_copy: Row<T> = A_matrix[diagonal_index];
-        // create values under the diagonal of the L matrix
-        // similtaniously substract the row if we are here anyway
-        for row_number in diagonal_index+1..matrix_size {
-            // if !(A_matrix[row_number][diagonal_index] == NumCast::from(0).unwrap()) { // checking for zero values will significantly reduce time for sparse matrices, add 1/2 * n comparisons for dense.
-                let value_under_diagonal = A_matrix_arc.read().unwrap()[row_number][diagonal_index] / A_matrix_arc.read().unwrap()[diagonal_index][diagonal_index];
-                L[row_number][diagonal_index] = value_under_diagonal;
-                // handle_vec.push(runtime.spawn(A_matrix(&A_matrix[diagonal_index], value_under_diagonal, A_matrix[row_number].clone(), row_number)));
-                handle_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index(A_matrix_arc.clone(), diagonal_index, value_under_diagonal, row_number)))
-                // handle_vec.push(runtime.spawn(A_matrix.substract_multiplied_internal_row_from_row_by_index(diagonal_index, value_under_diagonal, row_number))) // upto row_number becuase this is the same as the diagonal, range should also include the diagonal so plus 1
-            // }
-        }
+    //         let mut handle_B_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
+    //         let mut handle_L_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
+    
+    //         for row_index in row_range {
+    //             let factor = L[row_index][collumn_index];                
+    //             // if !(factor == NumCast::from(0).unwrap()){
+    //                 handle_L_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range(L_arc.clone(), collumn_index, factor, row_index, 0..collumn_index+1)));
+    //                 handle_B_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index(B_matrix_arc.clone(), collumn_index, factor, row_index)));
+    //             // }
 
-        for task in handle_vec {
-            let _ = task.block_on().unwrap();
-        }
+    //         }
 
-        // all values under the pivot should be zero: collumn operations is trivial -> just set values to 0
-        // Hypothesis: this is redundadnt
-        // for collumn_number in diagonal_index+1..matrix_size {
-        //     A_matrix[diagonal_index][collumn_number] = NumCast::from(0).unwrap();
-        // }
 
-    }
-
-    let time_Lmake = start_Lmake.elapsed() - time_Lmake_1;
-
-    let start_Ltrans = Instant::now();
-    // adding transpose of L onto itself so no second matrix needs to be created
-    for row_index in 0..matrix_size-1{
-        for column_index in row_index+1..matrix_size {
-            // if !(L[column_index][row_index] == NumCast::from(0).unwrap()){
-            L[row_index][column_index] = L[column_index][row_index];
-            // }
-        }
-    }
-    let time_Ltrans = start_Ltrans.elapsed();
-    // let mut Lt = L.clone();
-    // let Lt: () = L.transpose_square();
-
-    // let sol_1 = Matrix::new_from_solver(Solver2D { A_matrix: L.clone() , B_matrix: B_matrix.clone(), solver: Solver2DStrategy::Guass });
-
-    // let mut D: Matrix<T> = Matrix::new_square_eye(matrix_size, NumCast::from(1).unwrap());
-    // for diag_index in 0..matrix_size {
-    //     D[diag_index][diag_index] = A_matrix[diag_index][diag_index];
+    //         for task in handle_B_vec {
+    //             let _ = task.block_on().unwrap();
+    //         }
+    
+    //         for task in handle_L_vec {
+    //             let _ = task.block_on().unwrap();
+    //         }
     // }
+    // let time_mat3 = start_mat3.elapsed();
 
-    // let sol_2 = Matrix::new_from_solver(Solver2D { A_matrix: D, B_matrix: sol_1.B_matrix, solver: Solver2DStrategy::Guass });
+    // println!("time assign: {:?}, time Lmake1: {:?}, time Lmake: {:?},time Ltrans: {:?}, time mat1: {:?}, time mat2: {:?}, time mat3: {:?}", time_assign, time_Lmake_1,time_Lmake, time_Ltrans, time_mat1, time_mat2, time_mat3);
 
-    // L.transpose_square();
-
-    // let sol_3 = Matrix::new_from_solver(Solver2D { A_matrix: L, B_matrix: sol_2.B_matrix, solver: Solver2DStrategy::Guass });
-    // sol_3
-
-    async fn substract_B_async<T: MatrixValues>(row_to_substract_with: Row<T>, factor: T, from_row: Row<T>, from_row_number: usize) -> (Row<T>, usize) {
-        let mut result_vec = Vec::<T>::with_capacity(row_to_substract_with.len());
-
-        for j in 0..row_to_substract_with.len() {
-            result_vec.push(from_row[j] - row_to_substract_with[j] * factor)
-        }
-
-        (Row::new_row_from_vec(result_vec), from_row_number)
-    }
-    
-    let start_mat1 = Instant::now();
-
-    let B_matrix_arc = Arc::new(RwLock::new(B_matrix));
-    let L_arc = Arc::new(RwLock::new(L));
-
-    for collumn_index in 0..matrix_size-1 { // last downwards sweep is trivial
-
-        let mut handle_B_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
-        let mut handle_L_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
-
-        for row_index in collumn_index+1..matrix_size{
-            let factor = L[collumn_index][row_index];
-            // if !(factor == NumCast::from(0).unwrap()){
-                // L.substract_multiplied_internal_row_from_row_by_index_with_collumn_range(collumn_index, factor, row_index, 0..collumn_index+1);
-                // B_matrix.substract_multiplied_internal_row_from_row_by_index(collumn_index, factor, row_index);
-
-                handle_L_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range(L_arc.clone(), collumn_index, factor, row_index, 0..collumn_index+1)));
-                handle_B_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index(B_matrix_arc.clone(), collumn_index, factor, row_index)));
-
-        }
-
-        for task in handle_B_vec {
-            let _ = task.block_on().unwrap();
-        }
-
-        for task in handle_L_vec {
-            let _ = task.block_on().unwrap();
-        }
-    }
-    let time_mat1 = start_mat1.elapsed();
-
-    let start_mat2 = Instant::now();
-
-
-    let A_matrix = Arc::try_unwrap(A_matrix_arc).unwrap().into_inner().unwrap();
-    let mut B_matrix = Arc::try_unwrap(B_matrix_arc).unwrap().into_inner().unwrap();
-    
-    // do diagonal part of D (called A here)
-    for diagonal_index in 0..matrix_size {
-        if !(A_matrix[diagonal_index][diagonal_index] == NumCast::from(0).unwrap()) {
-            B_matrix[diagonal_index].divide_all_elements_by(A_matrix[diagonal_index][diagonal_index]);
-        }
-
-    }
-    let time_mat2 = start_mat2.elapsed();
-    // do upward sweep of L_t
-
-    let B_matrix_arc = Arc::new(RwLock::new(B_matrix));
-
-    let start_mat3 = Instant::now();
-    let mut coll_range = (1..matrix_size).collect::<Vec<usize>>();
-    coll_range.reverse();
-        for collumn_index in coll_range {
-            let mut row_range = (0..=collumn_index-1).collect::<Vec<usize>>();
-            row_range.reverse();
-
-            let mut handle_B_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
-            let mut handle_L_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
-    
-            for row_index in row_range {
-                let factor = L[row_index][collumn_index];                
-                // if !(factor == NumCast::from(0).unwrap()){
-                    handle_L_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range(L_arc.clone(), collumn_index, factor, row_index, 0..collumn_index+1)));
-                    handle_B_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index(B_matrix_arc.clone(), collumn_index, factor, row_index)));
-                // }
-
-            }
-
-
-            for task in handle_B_vec {
-                let _ = task.block_on().unwrap();
-            }
-    
-            for task in handle_L_vec {
-                let _ = task.block_on().unwrap();
-            }
-    }
-    let time_mat3 = start_mat3.elapsed();
-
-    println!("time assign: {:?}, time Lmake1: {:?}, time Lmake: {:?},time Ltrans: {:?}, time mat1: {:?}, time mat2: {:?}, time mat3: {:?}", time_assign, time_Lmake_1,time_Lmake, time_Ltrans, time_mat1, time_mat2, time_mat3);
-
-    let B_matrix = Arc::try_unwrap(B_matrix_arc).unwrap().into_inner().unwrap();
-    Solved2D { A_matrix: A_matrix, B_matrix: B_matrix}
+    // let B_matrix = Arc::try_unwrap(B_matrix_arc).unwrap().into_inner().unwrap();
+    // Solved2D { A_matrix: A_matrix, B_matrix: B_matrix}
 
     }
 
@@ -1272,8 +1277,10 @@ impl<T: MatrixValues> Matrix<T> {
         let mut j : usize = 0;
         for row in &rows_input {
             j = 0; // seems like i missed this, not 100% sure.
+            let mut working_row_self = self[*row].write().unwrap();
+            let working_row_input = matrix_input[i].read().unwrap();
             for coll in &colls_input {
-                self[*row][*coll] = matrix_input[i][j];
+                working_row_self[*coll] = working_row_input[j];
                 j += 1;
             }
             i += 1;
@@ -1304,8 +1311,10 @@ impl<T: MatrixValues> Matrix<T> {
         let mut j : usize = 0;
         for row in &rows_input {
             j = 0; // seems like i missed this, not 100% sure.
+            let mut working_row_self = self[*row].write().unwrap();
+            let working_row_input = self[*row].read().unwrap();
             for coll in &colls_input {
-                self[*row][*coll] = self[*row][*coll] + matrix_input[i][j];
+                working_row_self[*coll] = working_row_self[*coll] + working_row_input[j];
                 j += 1;
             }
             i += 1;
@@ -1318,9 +1327,9 @@ impl<T: MatrixValues> Matrix<T> {
         }
 
         for row_index in 0..self.height() {
-            self[row_index].addition_row_with_external_row(&other_matrix[row_index]);
+            self[row_index].write().unwrap().addition_row_with_external_row(&other_matrix[row_index].read().unwrap());
         }
-
+        // candidate multithreading
         self
     }
 
@@ -1332,8 +1341,9 @@ impl<T: MatrixValues> Matrix<T> {
         let colls_input:Vec<usize> = parse_dimension_input(colls);
 
         for row in &rows_input {
+            let mut working_row_self = self[*row].write().unwrap();
             for coll in &colls_input {
-                self[*row][*coll] = self[*row][*coll] * factor;
+                working_row_self[*coll] = working_row_self[*coll] * factor;
             }
         }
     }
@@ -1430,13 +1440,14 @@ impl<T: MatrixValues> Row<T> {
         self.normalize_all_elements_to_element(0);
     }
 
-    pub fn substract_row(&mut self, substraction_row: Row<T>) {
-        if !(self.cells.len() == substraction_row.cells.len()) {
+    pub fn substract_row(&mut self, substraction_row: Arc<RwLock<Row<T>>>) {
+        if !(self.cells.len() == substraction_row.read().unwrap().cells.len()) {
             panic!("Error: Length of substracting row is not equal to row length")
         }
+        let substraction_row_reserved = substraction_row.read().unwrap();
         for cell_number in 0..self.cells.len() {
             // if !(self[cell_number] == NumCast::from(0).unwrap() || substraction_row[cell_number] == NumCast::from(0).unwrap()) { // quickly tested on some sparse matrices but seem to really boost performance . In some more filled ones: around 50x improvemnt, ful matrix not tested yet
-            self[cell_number] = self[cell_number] - substraction_row[cell_number];
+            self[cell_number] = self[cell_number] - substraction_row_reserved[cell_number];
             // }
         }
     }
