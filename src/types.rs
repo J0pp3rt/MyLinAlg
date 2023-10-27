@@ -3,12 +3,15 @@
 #![allow(unused_imports)]
 
 use core::{f32, panic};
+use std::future::Future;
+use std::io::Error;
 use std::ops::{Index, IndexMut, Deref, Add};
 use std::any::{TypeId};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock, Weak};
 use std::ops::Range;
 use std::fmt::Display;
 use std::fmt::Debug;
+use std::thread::JoinHandle;
 use std::time::Instant;
 use std::vec;
 use cudarc::cublas::{safe, result, sys, Gemv, CudaBlas, GemvConfig, Gemm};
@@ -18,6 +21,13 @@ use num::traits::NumOps;
 use num::{Num, NumCast};
 use rand::Rng;
 use rand::distributions::uniform::SampleUniform;
+use tokio;
+use pollster::{self, FutureExt};
+
+#[tokio::main]
+async fn main() {}
+
+pub enum MyOk {Ok}
 
 pub fn abs<T: PartialOrd + NumCast + std::ops::Mul<Output = T>>(value: T) -> T {
     if value >= NumCast::from(0).unwrap() {
@@ -406,20 +416,21 @@ impl<T:MatrixValues> Add for Matrix<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct Matrix<T: MatrixValues> {
-    pub rows : Vec<Row<T>>
+    pub rows : Vec<Arc<RwLock<Row<T>>>>
 }
 
-pub trait MatrixValues: Copy + Display + PartialEq + Num + NumCast{
+pub trait MatrixValues: Copy + Display + PartialEq + Num + NumCast + std::marker::Sync + std::marker::Send + 'static + Debug{
 }
-impl<T> MatrixValues for T where T: Copy + Display + PartialEq + Num + NumCast {
+impl<T> MatrixValues for T where T: Copy + Display + PartialEq + Num + NumCast +std::marker::Sync + std::marker::Send + 'static + Debug{
 }
 
 impl<T: MatrixValues> Matrix<T> {
     pub fn new_square_with_constant_values(n_rows:usize, value: T) -> Matrix<T> {
-        let mut rows = Vec::<Row<T>>::with_capacity(n_rows);
+        let mut rows = Vec::<Arc<RwLock<Row<T>>>>::with_capacity(n_rows);
         for _ in 0..n_rows {
-            rows.push(Row::new_row_with_value(n_rows, value));
+            rows.push(Arc::new(RwLock::new(Row::new_row_with_value(n_rows, value))));
         } 
         Matrix {
              rows,
@@ -427,9 +438,9 @@ impl<T: MatrixValues> Matrix<T> {
     }
 
     pub fn new_with_constant_values(n_rows:usize, n_collumns: usize, value: T) -> Matrix<T> {
-        let mut rows = Vec::<Row<T>>::with_capacity(n_rows);
+        let mut rows = Vec::<Arc<RwLock<Row<T>>>>::with_capacity(n_rows);
         for _ in 0..n_rows {
-            rows.push(Row::new_row_with_value(n_collumns, value));
+            rows.push(Arc::new(RwLock::new(Row::new_row_with_value(n_collumns, value))));
         } 
         Matrix {
              rows,
@@ -437,17 +448,17 @@ impl<T: MatrixValues> Matrix<T> {
     }
 
     pub fn new_from_vector_rows(input: Vec<Vec<T>>) -> Matrix<T> {
-        let mut rows = Vec::<Row<T>>::with_capacity(input.len());
+        let mut rows = Vec::<Arc<RwLock<Row<T>>>>::with_capacity(input.len());
         for dimension in input{
-            rows.push( Row { cells : dimension});
+            rows.push( Arc::new(RwLock::new(Row { cells : dimension})));
         }
         Matrix { rows }
     }
 
     pub fn new_from_collumn(input_collumn: Collumn<T>) -> Matrix<T>{
-        let mut rows = Vec::<Row<T>>::with_capacity(input_collumn.n_rows());
+        let mut rows = Vec::<Arc<RwLock<Row<T>>>>::with_capacity(input_collumn.n_rows());
         for row_number in 0..input_collumn.n_rows(){
-            rows.push(Row { cells: vec![input_collumn[row_number]] })
+            rows.push(Arc::new(RwLock::new(Row { cells: vec![input_collumn[row_number]] })))
         }
 
         Matrix { rows }
@@ -496,7 +507,7 @@ impl<T: MatrixValues> Matrix<T> {
     }
 
     pub fn clone(&self) -> Matrix<T> {
-        let mut rows = Vec::<Row<T>>::with_capacity(self.rows.len());
+        let mut rows = Vec::<Arc<RwLock<Row<T>>>>::with_capacity(self.rows.len());
         for row in &self.rows{
             rows.push( row.clone());
         }
@@ -512,10 +523,10 @@ impl<T: MatrixValues> Matrix<T> {
     }
 
     pub fn row_length(&self) -> usize {
-        let mut largest_length = self.rows[0].len();
+        let mut largest_length = self.rows[0].read().unwrap().len();
         for row in &self.rows {
-            if row.len() > largest_length {
-                largest_length = row.len();
+            if row.read().unwrap().len() > largest_length {
+                largest_length = row.read().unwrap().len();
                 println!("Row lengths of matrix not consistant!")
             }
         }
@@ -725,7 +736,7 @@ impl<T: MatrixValues> Matrix<T> {
         if insert_row_at == self.rows.len() {
             self.append_row(new_row);
         } else {
-            self.rows.insert(insert_row_at, new_row)
+            self.rows.insert(insert_row_at, Arc::new(RwLock::new(new_row)))
         }
     }
 
@@ -735,12 +746,12 @@ impl<T: MatrixValues> Matrix<T> {
     }
 
     pub fn append_row(&mut self, new_row: Row<T>) {
-            self.rows.push(new_row);
+            self.rows.push(Arc::new(RwLock::new(new_row)));
     }
 
     pub fn append_row_zeros(&mut self) {
         let width = self.width();
-        self.rows.push( Row::new_row_with_constant_values(width, NumCast::from(0).unwrap()));
+        self.rows.push(Arc::new(RwLock::new( Row::new_row_with_constant_values(width, NumCast::from(0).unwrap()))));
     }
 
     pub fn append_collumn_zeros(&mut self) {
@@ -778,7 +789,7 @@ impl<T: MatrixValues> Matrix<T> {
 
     pub fn multiply_all_elements_by(&mut self, factor: T) -> &Self {
         for row_number in 0..self.rows.len() {
-            self.rows[row_number].multiply_all_elements_by(factor);
+            self.rows[row_number].write().unwrap().multiply_all_elements_by(factor);
         }
 
         self
@@ -786,7 +797,7 @@ impl<T: MatrixValues> Matrix<T> {
 
     pub fn divide_all_elements_by(&mut self, factor: T) {
         for row_number in 0..self.rows.len() {
-            self.rows[row_number].divide_all_elements_by(factor)
+            self.rows[row_number].write().unwrap().divide_all_elements_by(factor)
         }
     }
 
@@ -873,12 +884,40 @@ fn solve_with_guass<T: MatrixValues>(system_of_equations: Solver2D<T>) -> Solved
     Solved2D {A_matrix, B_matrix}
 }
 
-fn solve_with_cholesky_quare_root_free_decomposition<T: MatrixValues>(mut system_of_equations: Solver2D<T>) -> Solved2D<T> {
+fn async_substract_multiplied_internal_row_from_row_by_index<T: MatrixValues>(row_to_substract_with: Arc<RwLock<Row<T>>>, factor: T, from_row: Arc<RwLock<Row<T>>>) {
+    let readable_row = row_to_substract_with.read().unwrap();
+    
+    let row_length = readable_row.len();
+
+    let mut mutable_row = from_row.write().unwrap();
+    for column_index in 0..row_length {
+        mutable_row[column_index] = mutable_row[column_index] - readable_row[column_index] * factor;
+    }
+
+}
+
+fn async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range<T: MatrixValues>(row_to_substract_with: Arc<RwLock<Row<T>>>, factor: T, from_row: Arc<RwLock<Row<T>>>, collumn_range: Range<usize>) {
+    let readable_row = row_to_substract_with.read().unwrap();
+
+    let mut mutable_row = from_row.write().unwrap();
+    for column_index in collumn_range {
+        mutable_row[column_index] = mutable_row[column_index] - readable_row[column_index] * factor;
+    }
+
+}
+
+// fn async_divide_all_elements_by<T:MatrixValues>(row_to_devide)
+
+
+fn solve_with_cholesky_quare_root_free_decomposition<T: MatrixValues+ std::marker::Send + std::marker::Sync>(mut system_of_equations: Solver2D<T>) -> Solved2D<T> {
     // this function consumes A and B
     let start_assign = Instant::now();
     let mut A_matrix = system_of_equations.A_matrix;
     let mut B_matrix = system_of_equations.B_matrix;
     let time_assign = start_assign.elapsed();
+
+
+    let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(16).build().unwrap();
 
     if !(A_matrix.is_square()) {
         panic!("If a matrix aint square it cant be symmetric -> given A matrix not square")
@@ -896,19 +935,64 @@ fn solve_with_cholesky_quare_root_free_decomposition<T: MatrixValues>(mut system
     let time_test1 = test1.elapsed();
     println!("time test 1 {:?}", time_test1);
 
+    // async fn async_substract_multiplied_internal_row_from_row_by_index<T: MatrixValues>(row_to_substract_with: & Row<T>, factor: T, from_row: Row<T>, from_row_number: usize) -> (Row<T>, usize) {
+    //     let mut result_vec = Vec::<T>::with_capacity(row_to_substract_with.len());
+
+    //     for j in 0..row_to_substract_with.len() {
+    //         result_vec.push(from_row[j] - row_to_substract_with[j] * factor)
+    //     }
+
+    //     (Row::new_row_from_vec(result_vec), from_row_number)
+    // }
+
+    async fn solver_async_substract_multiplied_internal_row_from_row_by_index<T: MatrixValues>(A_matrix: Arc<RwLock<Matrix<T>>>, row_number_to_substract_with: usize, factor:T, from_row_number: usize) {
+        // A_matrix.substract_multiplied_internal_row_from_row_by_index(row_number_to_substract_with, factor, from_row_number);
+        // let x = A_matrix.into_raw().read().read().unwrap()
+        
+        let row_1_arc = A_matrix.clone().read().unwrap().rows[row_number_to_substract_with].clone();
+        let row_2_arc = A_matrix.read().unwrap().rows[from_row_number].clone();
+
+        async_substract_multiplied_internal_row_from_row_by_index(row_1_arc, factor, row_2_arc);
+        // let x  = A_matrix.;
+    }
+
+    async fn solver_async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range<T: MatrixValues>(A_matrix: Arc<RwLock<Matrix<T>>>, row_number_to_substract_with: usize, factor:T, from_row_number: usize, collumn_range:Range<usize>) {
+        // A_matrix.substract_multiplied_internal_row_from_row_by_index(row_number_to_substract_with, factor, from_row_number);
+        let row_1_arc = A_matrix.clone().read().unwrap().rows[row_number_to_substract_with].clone();
+        let row_2_arc = A_matrix.read().unwrap().rows[from_row_number].clone();
+
+        async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range(row_1_arc, factor, row_2_arc, collumn_range);
+        // let x  = A_matrix.;
+    }
+
+    // async fn solver_async_divide_all_elements_by<T: MatrixValues>(A_matrix: Arc<RwLock<Matrix<T>>>, row_number_to_divide: usize, factor: T) {
+
+    // }
+
+    let A_matrix_height = A_matrix.height();
+    let mut A_matrix_arc = Arc::new(RwLock::new(A_matrix));
+
     for diagonal_index in 0..matrix_size {
         // if A_matrix[diagonal_index][diagonal_index] == NumCast::from(0).unwrap() {
         //     panic!("ERROR! found zero value at diagonal");
         // }
+        let mut handle_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
 
+        // let row_copy: Row<T> = A_matrix[diagonal_index];
         // create values under the diagonal of the L matrix
         // similtaniously substract the row if we are here anyway
         for row_number in diagonal_index+1..matrix_size {
             // if !(A_matrix[row_number][diagonal_index] == NumCast::from(0).unwrap()) { // checking for zero values will significantly reduce time for sparse matrices, add 1/2 * n comparisons for dense.
-                let value_under_diagonal = A_matrix[row_number][diagonal_index] / A_matrix[diagonal_index][diagonal_index];
+                let value_under_diagonal = A_matrix_arc.read().unwrap()[row_number][diagonal_index] / A_matrix_arc.read().unwrap()[diagonal_index][diagonal_index];
                 L[row_number][diagonal_index] = value_under_diagonal;
-                A_matrix.substract_multiplied_internal_row_from_row_by_index(diagonal_index, value_under_diagonal, row_number) // upto row_number becuase this is the same as the diagonal, range should also include the diagonal so plus 1
+                // handle_vec.push(runtime.spawn(A_matrix(&A_matrix[diagonal_index], value_under_diagonal, A_matrix[row_number].clone(), row_number)));
+                handle_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index(A_matrix_arc.clone(), diagonal_index, value_under_diagonal, row_number)))
+                // handle_vec.push(runtime.spawn(A_matrix.substract_multiplied_internal_row_from_row_by_index(diagonal_index, value_under_diagonal, row_number))) // upto row_number becuase this is the same as the diagonal, range should also include the diagonal so plus 1
             // }
+        }
+
+        for task in handle_vec {
+            let _ = task.block_on().unwrap();
         }
 
         // all values under the pivot should be zero: collumn operations is trivial -> just set values to 0
@@ -916,6 +1000,7 @@ fn solve_with_cholesky_quare_root_free_decomposition<T: MatrixValues>(mut system
         // for collumn_number in diagonal_index+1..matrix_size {
         //     A_matrix[diagonal_index][collumn_number] = NumCast::from(0).unwrap();
         // }
+
     }
 
     let time_Lmake = start_Lmake.elapsed() - time_Lmake_1;
@@ -946,21 +1031,54 @@ fn solve_with_cholesky_quare_root_free_decomposition<T: MatrixValues>(mut system
 
     // let sol_3 = Matrix::new_from_solver(Solver2D { A_matrix: L, B_matrix: sol_2.B_matrix, solver: Solver2DStrategy::Guass });
     // sol_3
+
+    async fn substract_B_async<T: MatrixValues>(row_to_substract_with: Row<T>, factor: T, from_row: Row<T>, from_row_number: usize) -> (Row<T>, usize) {
+        let mut result_vec = Vec::<T>::with_capacity(row_to_substract_with.len());
+
+        for j in 0..row_to_substract_with.len() {
+            result_vec.push(from_row[j] - row_to_substract_with[j] * factor)
+        }
+
+        (Row::new_row_from_vec(result_vec), from_row_number)
+    }
     
     let start_mat1 = Instant::now();
+
+    let B_matrix_arc = Arc::new(RwLock::new(B_matrix));
+    let L_arc = Arc::new(RwLock::new(L));
+
     for collumn_index in 0..matrix_size-1 { // last downwards sweep is trivial
+
+        let mut handle_B_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
+        let mut handle_L_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
+
         for row_index in collumn_index+1..matrix_size{
             let factor = L[collumn_index][row_index];
             // if !(factor == NumCast::from(0).unwrap()){
-                L.substract_multiplied_internal_row_from_row_by_index_with_collumn_range(collumn_index, factor, row_index, 0..collumn_index+1);
-                B_matrix.substract_multiplied_internal_row_from_row_by_index(collumn_index, factor, row_index);
-            // }
+                // L.substract_multiplied_internal_row_from_row_by_index_with_collumn_range(collumn_index, factor, row_index, 0..collumn_index+1);
+                // B_matrix.substract_multiplied_internal_row_from_row_by_index(collumn_index, factor, row_index);
 
+                handle_L_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range(L_arc.clone(), collumn_index, factor, row_index, 0..collumn_index+1)));
+                handle_B_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index(B_matrix_arc.clone(), collumn_index, factor, row_index)));
+
+        }
+
+        for task in handle_B_vec {
+            let _ = task.block_on().unwrap();
+        }
+
+        for task in handle_L_vec {
+            let _ = task.block_on().unwrap();
         }
     }
     let time_mat1 = start_mat1.elapsed();
 
     let start_mat2 = Instant::now();
+
+
+    let A_matrix = Arc::try_unwrap(A_matrix_arc).unwrap().into_inner().unwrap();
+    let mut B_matrix = Arc::try_unwrap(B_matrix_arc).unwrap().into_inner().unwrap();
+    
     // do diagonal part of D (called A here)
     for diagonal_index in 0..matrix_size {
         if !(A_matrix[diagonal_index][diagonal_index] == NumCast::from(0).unwrap()) {
@@ -971,25 +1089,41 @@ fn solve_with_cholesky_quare_root_free_decomposition<T: MatrixValues>(mut system
     let time_mat2 = start_mat2.elapsed();
     // do upward sweep of L_t
 
+    let B_matrix_arc = Arc::new(RwLock::new(B_matrix));
+
     let start_mat3 = Instant::now();
     let mut coll_range = (1..matrix_size).collect::<Vec<usize>>();
     coll_range.reverse();
         for collumn_index in coll_range {
             let mut row_range = (0..=collumn_index-1).collect::<Vec<usize>>();
             row_range.reverse();
+
+            let mut handle_B_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
+            let mut handle_L_vec = Vec::<tokio::task::JoinHandle<()>>::with_capacity(A_matrix_height);
+    
             for row_index in row_range {
                 let factor = L[row_index][collumn_index];                
                 // if !(factor == NumCast::from(0).unwrap()){
-                    L.substract_multiplied_internal_row_from_row_by_index_with_collumn_range(collumn_index, factor, row_index, (row_index+1..collumn_index).rev().collect::<Vec<usize>>());
-                    B_matrix.substract_multiplied_internal_row_from_row_by_index(collumn_index, factor, row_index);
+                    handle_L_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range(L_arc.clone(), collumn_index, factor, row_index, 0..collumn_index+1)));
+                    handle_B_vec.push(runtime.spawn(solver_async_substract_multiplied_internal_row_from_row_by_index(B_matrix_arc.clone(), collumn_index, factor, row_index)));
                 // }
 
+            }
+
+
+            for task in handle_B_vec {
+                let _ = task.block_on().unwrap();
+            }
+    
+            for task in handle_L_vec {
+                let _ = task.block_on().unwrap();
             }
     }
     let time_mat3 = start_mat3.elapsed();
 
     println!("time assign: {:?}, time Lmake1: {:?}, time Lmake: {:?},time Ltrans: {:?}, time mat1: {:?}, time mat2: {:?}, time mat3: {:?}", time_assign, time_Lmake_1,time_Lmake, time_Ltrans, time_mat1, time_mat2, time_mat3);
 
+    let B_matrix = Arc::try_unwrap(B_matrix_arc).unwrap().into_inner().unwrap();
     Solved2D { A_matrix: A_matrix, B_matrix: B_matrix}
 
     }
@@ -1001,8 +1135,8 @@ impl<T: MatrixValues> Matrix<T>{
         println!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
         for row_number in 0..self.rows.len(){
             print!("row {} :", row_number);
-            for coll in 0..self.rows[row_number].cells.len(){
-                print!(" {:.5} ", self.rows[row_number].cells[coll])
+            for coll in 0..self.rows[row_number].read().unwrap().cells.len(){
+                print!(" {:.5} ", self.rows[row_number].read().unwrap().cells[coll])
             }
             println!("\n")
         }
@@ -1067,9 +1201,9 @@ pub trait InputMatrix<W, T: MatrixValues> { // can not be realisticly implemeted
 
 impl<W, T: MatrixValues> InputMatrix<W, T> for Vec<Vec<T>> {
     fn parse_input(&self) -> Matrix<T> {
-        let mut rows = Vec::<Row<T>>::with_capacity(self.len());
+        let mut rows = Vec::<Arc<RwLock<Row<T>>>>::with_capacity(self.len());
         for row in self{
-            rows.push( Row { cells : row.to_vec()});
+            rows.push( Arc::new( RwLock::new(Row { cells : row.to_vec()})));
         }
         Matrix { rows}
     }
@@ -1078,7 +1212,7 @@ impl<W, T: MatrixValues> InputMatrix<W, T> for Vec<Vec<T>> {
 impl<W, T: MatrixValues> InputMatrix<W, T> for Vec<T> {
     fn parse_input(&self) -> Matrix<T> {
             let vac = self.to_vec();
-            let row = vec!{Row{ cells : vac}};
+            let row = vec!{Arc::new( RwLock::new(Row{ cells : vac}))};
 
             Matrix { rows: row}
         
@@ -1087,7 +1221,7 @@ impl<W, T: MatrixValues> InputMatrix<W, T> for Vec<T> {
 
 impl<W, T: MatrixValues> InputMatrix<W, T> for &Vec<T> {
     fn parse_input(&self) -> Matrix<T> {
-            let row = vec!{Row{ cells : self.to_vec()}};
+            let row = vec!{Arc::new( RwLock::new(Row{ cells : self.to_vec()}))};
 
             Matrix { rows: row}
         
@@ -1206,7 +1340,7 @@ impl<T: MatrixValues> Matrix<T> {
 }
 
 impl<T: MatrixValues> Index<usize> for Matrix< T> {
-    type Output = Row<T>;
+    type Output = Arc<RwLock<Row<T>>>;
     fn index(&self, index: usize) -> &Self::Output {
         &self.rows[index]
     }
