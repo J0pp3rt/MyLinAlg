@@ -5,13 +5,14 @@
 use core::{f32, panic};
 use std::future::Future;
 use std::io::Error;
+use std::marker::PhantomData;
 use std::ops::{Index, IndexMut, Deref, Add};
 use std::any::{TypeId};
 use std::sync::{Arc, RwLock, Weak};
 use std::ops::Range;
 use std::fmt::Display;
 use std::fmt::Debug;
-use std::thread::JoinHandle;
+use std::thread::Thread;
 use std::time::Instant;
 use std::vec;
 use cudarc::cublas::{safe, result, sys, Gemv, CudaBlas, GemvConfig, Gemm};
@@ -22,12 +23,53 @@ use num::{Num, NumCast};
 use rand::Rng;
 use rand::distributions::uniform::SampleUniform;
 use tokio;
+use tokio::task::JoinHandle;
 use pollster::{self, FutureExt};
 
-#[tokio::main]
-async fn main() {}
 
-pub enum MyOk {Ok}
+struct ThreadingController {
+    running_threads: Vec<JoinHandle<()>>,
+    tokio_runtime: tokio::runtime::Runtime
+}
+impl ThreadingController{
+    fn new() -> Self {
+        let tokio_runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(16).build().unwrap();
+        ThreadingController { running_threads: Vec::<JoinHandle<()>>::new(), tokio_runtime}
+    }
+
+    fn with_capacity(capacity: usize) -> Self {
+        let tokio_runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(16).build().unwrap();
+        ThreadingController { running_threads: Vec::<JoinHandle<()>>::with_capacity(capacity), tokio_runtime}
+    }
+
+    fn add_handle(&mut self, handle_to_add: impl Future<Output = ()> + std::marker::Send + 'static){
+        self.running_threads.push(self.tokio_runtime.spawn(handle_to_add));
+    }
+
+    fn block_untill_done(&mut self)  {
+        let previous_length = self.running_threads.len();
+        for thread in &mut self.running_threads{
+            thread.block_on().unwrap();
+        }
+        self.running_threads = Vec::<JoinHandle<()>>::with_capacity(previous_length);
+    }
+}
+
+
+async fn substract_row_x_factor_from_row<T: MatrixValues>(substracting_row: Arc<RwLock<Row<T>>>, factor: T, from_row: Arc<RwLock<Row<T>>>) -> () {
+    let substracting_row_read = substracting_row.read().unwrap();
+    let mut from_row_write = from_row.write().unwrap();
+    // let x = tokio::spawn()
+    if !(substracting_row_read.len() == from_row_write.len()){
+        panic!("rows for substraction not consistent!")
+    }
+
+    for j in 0..substracting_row_read.len() {
+        from_row_write[j] = from_row_write[j] - substracting_row_read[j] * factor;
+    }
+
+    return ();
+}
 
 pub fn abs<T: PartialOrd + NumCast + std::ops::Mul<Output = T>>(value: T) -> T {
     if value >= NumCast::from(0).unwrap() {
@@ -817,6 +859,8 @@ fn solve_with_guass<T: MatrixValues>(system_of_equations: Solver2D<T>) -> Solved
     let mut working_row :usize = 0; // A better name for this one probably exists
     let mut keep_itterating: bool = true;
 
+    let mut threading = ThreadingController::with_capacity(A_matrix.height());
+
     while keep_itterating {
         // start by finding the first row that has a value for the first collumn
         let to_work_on_collumn = A_matrix.get_collumn(working_collumn);
@@ -853,13 +897,18 @@ fn solve_with_guass<T: MatrixValues>(system_of_equations: Solver2D<T>) -> Solved
         for row_number_of_other_row in (0..A_matrix.rows.len()).filter(|index| !(*index == working_row)) {
             // skip substraction of value in this row is already zero, save computational time
             
-            if A_matrix[row_number_of_other_row].read().unwrap()[working_collumn] == NumCast::from(0).unwrap() {
-                continue;
-            }
+            // if A_matrix[row_number_of_other_row].read().unwrap()[working_collumn] == NumCast::from(0).unwrap() {
+            //     continue;
+            // }
             let factor_of_substraction = A_matrix[row_number_of_other_row].read().unwrap()[working_collumn] / A_matrix[working_row].read().unwrap()[working_collumn];
-            A_matrix.substract_multiplied_internal_row_from_row_by_index(working_row, factor_of_substraction, row_number_of_other_row);
-            B_matrix.substract_multiplied_internal_row_from_row_by_index(working_row, factor_of_substraction, row_number_of_other_row);
+
+            threading.add_handle(substract_row_x_factor_from_row(A_matrix[working_row].clone(), factor_of_substraction, A_matrix[row_number_of_other_row].clone()));
+            threading.add_handle(substract_row_x_factor_from_row(B_matrix[working_row].clone(), factor_of_substraction, B_matrix[row_number_of_other_row].clone()));
+            // A_matrix.substract_multiplied_internal_row_from_row_by_index(working_row, factor_of_substraction, row_number_of_other_row);
+            // B_matrix.substract_multiplied_internal_row_from_row_by_index(working_row, factor_of_substraction, row_number_of_other_row);
         }
+
+        threading.block_untill_done();
 
         // in all other rows the variable should have been eliminated, continue to the next row and collumn
         working_collumn += 1;
@@ -888,27 +937,27 @@ fn solve_with_guass<T: MatrixValues>(system_of_equations: Solver2D<T>) -> Solved
     Solved2D {A_matrix, B_matrix}
 }
 
-fn async_substract_multiplied_internal_row_from_row_by_index<T: MatrixValues>(row_to_substract_with: Arc<RwLock<Row<T>>>, factor: T, from_row: Arc<RwLock<Row<T>>>) {
-    let readable_row = row_to_substract_with.read().unwrap();
+// fn async_substract_multiplied_internal_row_from_row_by_index<T: MatrixValues>(row_to_substract_with: Arc<RwLock<Row<T>>>, factor: T, from_row: Arc<RwLock<Row<T>>>) {
+//     let readable_row = row_to_substract_with.read().unwrap();
     
-    let row_length = readable_row.len();
+//     let row_length = readable_row.len();
 
-    let mut mutable_row = from_row.write().unwrap();
-    for column_index in 0..row_length {
-        mutable_row[column_index] = mutable_row[column_index] - readable_row[column_index] * factor;
-    }
+//     let mut mutable_row = from_row.write().unwrap();
+//     for column_index in 0..row_length {
+//         mutable_row[column_index] = mutable_row[column_index] - readable_row[column_index] * factor;
+//     }
 
-}
+// }
 
-fn async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range<T: MatrixValues>(row_to_substract_with: Arc<RwLock<Row<T>>>, factor: T, from_row: Arc<RwLock<Row<T>>>, collumn_range: Range<usize>) {
-    let readable_row = row_to_substract_with.read().unwrap();
+// fn async_substract_multiplied_internal_row_from_row_by_index_with_collumn_range<T: MatrixValues>(row_to_substract_with: Arc<RwLock<Row<T>>>, factor: T, from_row: Arc<RwLock<Row<T>>>, collumn_range: Range<usize>) {
+//     let readable_row = row_to_substract_with.read().unwrap();
 
-    let mut mutable_row = from_row.write().unwrap();
-    for column_index in collumn_range {
-        mutable_row[column_index] = mutable_row[column_index] - readable_row[column_index] * factor;
-    }
+//     let mut mutable_row = from_row.write().unwrap();
+//     for column_index in collumn_range {
+//         mutable_row[column_index] = mutable_row[column_index] - readable_row[column_index] * factor;
+//     }
 
-}
+// }
 
 // fn async_divide_all_elements_by<T:MatrixValues>(row_to_devide)
 
