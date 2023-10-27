@@ -26,24 +26,33 @@ use tokio;
 use tokio::task::JoinHandle;
 use pollster::{self, FutureExt};
 
+const N_THREADS: usize = 8;
 
-struct ThreadingController {
+struct ThreadingControllerSubstractFullRows<T: MatrixValues> {
+    row_to_substract_with: Vec<Arc<RwLock<Row<T>>>>,
+    factor: Vec<T>,
+    from_row: Vec<Arc<RwLock<Row<T>>>>,
     running_threads: Vec<JoinHandle<()>>,
-    tokio_runtime: tokio::runtime::Runtime
+    tokio_runtime: tokio::runtime::Runtime,
 }
-impl ThreadingController{
-    fn new() -> Self {
-        let tokio_runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(8).build().unwrap();
-        ThreadingController { running_threads: Vec::<JoinHandle<()>>::new(), tokio_runtime}
+
+impl<T: MatrixValues> ThreadingControllerSubstractFullRows<T>{
+    fn new(example_value: Vec<T>) -> Self {
+        let tokio_runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(N_THREADS).build().unwrap();
+        let row_to_substract_with = Vec::<Arc<RwLock<Row<T>>>>::new();
+        let factor = Vec::<T>::new();
+        let from_row = Vec::<Arc<RwLock<Row<T>>>>::new();
+        let running_threads = Vec::<JoinHandle<()>>::new();
+        ThreadingControllerSubstractFullRows { row_to_substract_with, factor, from_row, running_threads, tokio_runtime }
     }
 
-    fn with_capacity(capacity: usize) -> Self {
-        let tokio_runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(8).build().unwrap();
-        ThreadingController { running_threads: Vec::<JoinHandle<()>>::with_capacity(capacity), tokio_runtime}
-    }
-
-    fn add_handle(&mut self, handle_to_add: impl Future<Output = ()> + std::marker::Send + 'static){
-        self.running_threads.push(self.tokio_runtime.spawn(handle_to_add));
+    fn with_capacity(capacity: usize, example_value: Vec<T>) -> Self {
+        let tokio_runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(N_THREADS).build().unwrap();
+        let row_to_substract_with = Vec::<Arc<RwLock<Row<T>>>>::with_capacity(capacity);
+        let factor = Vec::<T>::with_capacity(capacity);
+        let from_row = Vec::<Arc<RwLock<Row<T>>>>::with_capacity(capacity);
+        let running_threads = Vec::<JoinHandle<()>>::with_capacity(capacity);
+        ThreadingControllerSubstractFullRows { row_to_substract_with, factor, from_row, running_threads, tokio_runtime }
     }
 
     fn block_untill_done(&mut self)  {
@@ -53,21 +62,98 @@ impl ThreadingController{
         }
         self.running_threads = Vec::<JoinHandle<()>>::with_capacity(previous_length);
     }
+
+    fn add_rows_to_substract(&mut self, substracting_row: Arc<RwLock<Row<T>>>, factor: T, from_row: Arc<RwLock<Row<T>>>) {
+        self.row_to_substract_with.push(substracting_row);
+        self.factor.push(factor);
+        self.from_row.push(from_row);
+    }
+
+    fn start_working(&mut self) {
+        let n_rows_to_substract = self.row_to_substract_with.len();
+
+        let number_of_rows_per_worker = (n_rows_to_substract as f64 / N_THREADS as f64).ceil() as usize;
+        let mut running_total: usize = 0;
+
+        for worker in 0..N_THREADS{
+            if running_total < n_rows_to_substract {
+                if running_total + number_of_rows_per_worker < n_rows_to_substract {
+                    self.running_threads.push(
+                        self.tokio_runtime.spawn(
+                            substract_row_x_factor_from_row(
+                                self.row_to_substract_with[running_total..running_total+number_of_rows_per_worker].to_vec(), 
+                                self.factor[running_total..running_total+number_of_rows_per_worker].to_vec(),
+                                self.from_row[running_total..running_total+number_of_rows_per_worker].to_vec(),
+                            )
+                        )
+                    );
+                    running_total += number_of_rows_per_worker;
+                } else {
+                    let upper_limit = n_rows_to_substract - running_total;
+                    self.tokio_runtime.spawn(
+                        substract_row_x_factor_from_row(
+                            self.row_to_substract_with[running_total..running_total+number_of_rows_per_worker].to_vec(), 
+                            self.factor[running_total..running_total+number_of_rows_per_worker].to_vec(),
+                            self.from_row[running_total..running_total+number_of_rows_per_worker].to_vec(),
+                        )
+                    );
+                    running_total += upper_limit - running_total;
+                }
+            }
+        }
+    }
 }
 
+// struct ThreadingController<Function = ThreadingControllerFunctions> {
+//     running_threads: Vec<JoinHandle<()>>,
+//     tokio_runtime: tokio::runtime::Runtime,
+//     function: PhantomData<Function>,
+// }
 
-async fn substract_row_x_factor_from_row<T: MatrixValues>(substracting_row: Arc<RwLock<Row<T>>>, factor: T, from_row: Arc<RwLock<Row<T>>>) -> () {
-    let substracting_row_read = substracting_row.read().unwrap();
-    let mut from_row_write = from_row.write().unwrap();
-    // let x = tokio::spawn()
-    if !(substracting_row_read.len() == from_row_write.len()){
-        panic!("rows for substraction not consistent!")
+// struct SubstractRowsFullData<T: MatrixValues> {
+//     row_to_substract_with: Vec<Arc<RwLock<Row<T>>>>,
+//     factor: Vec<usize>,
+//     from_row: Vec<Arc<RwLock<Row<T>>>>,
+// }
+
+// enum ThreadingControllerFunctions {
+//     InitialState,
+//     SubstractRowsFull(SubstractRowsFullData),
+// }
+
+// impl ThreadingController{
+//     fn new_substract_row_full() -> Self {
+//         let tokio_runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(8).build().unwrap();
+//         ThreadingController { running_threads: Vec::<JoinHandle<()>>::new(), tokio_runtime, function: ThreadingControllerFunctions::SubstractRowsFull}
+//     }
+
+//     fn substract_row_full_with_capacity(capacity: usize) -> Self {
+//         let tokio_runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(2).build().unwrap();
+//         ThreadingController { running_threads: Vec::<JoinHandle<()>>::with_capacity(capacity), tokio_runtime, function: ThreadingControllerFunctions::SubstractRowsFull}
+//     }
+
+//     fn add_handle(&mut self, handle_to_add: impl Future<Output = ()> + std::marker::Send + 'static){
+//         self.running_threads.push(self.tokio_runtime.spawn(handle_to_add));
+//     }
+
+
+// }
+
+
+async fn substract_row_x_factor_from_row<T: MatrixValues>(substracting_row: Vec<Arc<RwLock<Row<T>>>>, factor: Vec<T>, from_row: Vec<Arc<RwLock<Row<T>>>>) -> () {
+    for task_number in 0..substracting_row.len() {
+    
+        let substracting_row_read = substracting_row[task_number].read().unwrap();
+        let mut from_row_write = from_row[task_number].write().unwrap();
+        // let x = tokio::spawn()
+        if !(substracting_row_read.len() == from_row_write.len()){
+            panic!("rows for substraction not consistent!")
+        }
+
+        for j in 0..substracting_row_read.len() {
+            from_row_write[j] = from_row_write[j] - substracting_row_read[j] * factor[task_number];
+        }
     }
-
-    for j in 0..substracting_row_read.len() {
-        from_row_write[j] = from_row_write[j] - substracting_row_read[j] * factor;
-    }
-
     return ();
 }
 
@@ -859,7 +945,7 @@ fn solve_with_guass<T: MatrixValues>(system_of_equations: Solver2D<T>) -> Solved
     let mut working_row :usize = 0; // A better name for this one probably exists
     let mut keep_itterating: bool = true;
 
-    let mut threading = ThreadingController::with_capacity(A_matrix.height());
+    let mut threading = ThreadingControllerSubstractFullRows::with_capacity(A_matrix.height(), Vec::<T>::new());
 
     while keep_itterating {
         // start by finding the first row that has a value for the first collumn
@@ -902,8 +988,8 @@ fn solve_with_guass<T: MatrixValues>(system_of_equations: Solver2D<T>) -> Solved
             // }
             let factor_of_substraction = A_matrix[row_number_of_other_row].read().unwrap()[working_collumn] / A_matrix[working_row].read().unwrap()[working_collumn];
 
-            threading.add_handle(substract_row_x_factor_from_row(A_matrix[working_row].clone(), factor_of_substraction, A_matrix[row_number_of_other_row].clone()));
-            threading.add_handle(substract_row_x_factor_from_row(B_matrix[working_row].clone(), factor_of_substraction, B_matrix[row_number_of_other_row].clone()));
+            threading.add_rows_to_substract(A_matrix[working_row].clone(), factor_of_substraction, A_matrix[row_number_of_other_row].clone());
+            threading.add_rows_to_substract(B_matrix[working_row].clone(), factor_of_substraction, B_matrix[row_number_of_other_row].clone());
             // A_matrix.substract_multiplied_internal_row_from_row_by_index(working_row, factor_of_substraction, row_number_of_other_row);
             // B_matrix.substract_multiplied_internal_row_from_row_by_index(working_row, factor_of_substraction, row_number_of_other_row);
         }
