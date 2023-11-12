@@ -10,3 +10,6 @@ num = "0.4"
 cudarc = "0.9.14"
 rand = "0.8.5"
 round-based = "0.1.7"
+lazy_static = "1.4.0"
+
+

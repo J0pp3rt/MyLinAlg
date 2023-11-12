@@ -3,6 +3,7 @@
 #![allow(unused_imports)]
 
 use core::{f32, panic};
+use std::arch::x86_64::{_mm256_set_pd, _mm256_loadu_pd};
 use std::ops::{Index, IndexMut, Deref, Add};
 use std::any::{TypeId};
 use std::sync::Arc;
@@ -18,6 +19,10 @@ use num::traits::NumOps;
 use num::{Num, NumCast};
 use rand::Rng;
 use rand::distributions::uniform::SampleUniform;
+
+lazy_static!{
+    static ref IS_AVX2: bool = is_x86_feature_detected!("avx2");
+}
 
 pub fn abs<T: PartialOrd + NumCast + std::ops::Mul<Output = T>>(value: T) -> T {
     if value >= NumCast::from(0).unwrap() {
@@ -1300,6 +1305,31 @@ impl<T: MatrixValues> Row<T> {
         if !(self.cells.len() == substraction_row.cells.len()) {
             panic!("Error: Length of substracting row is not equal to row length")
         }
+        if *IS_AVX2{
+            unsafe {self.substract_avx2(substraction_row)}
+        } else {
+            self.substract_all(substraction_row)
+        }
+
+
+    }
+
+    // #[target_feature(enable = "avx2")]
+    // unsafe fn substract_avx2(&mut self, substraction_row: Row<T>) {
+    //     for cell_number in 0..self.cells.len() {
+    //         // if !(self[cell_number] == NumCast::from(0).unwrap() || substraction_row[cell_number] == NumCast::from(0).unwrap()) { // quickly tested on some sparse matrices but seem to really boost performance . In some more filled ones: around 50x improvemnt, ful matrix not tested yet
+    //         self[cell_number] = self[cell_number] - substraction_row[cell_number];
+    //         // } 
+    //         assert!(substraction_row.len() % 4 == 0);
+    //         let mut A_row_base = self.cells.as_ptr();
+    //         let mut B_row_base = substraction_row.cells.as_ptr();
+    //         for _ in 0..self.len() /4{
+    //             let A_row = _mm256_loadu_pd(A_row_base);
+    //         }
+    //     }
+    // }
+
+    fn substract_all(&mut self, substraction_row: Row<T>) {
         for cell_number in 0..self.cells.len() {
             // if !(self[cell_number] == NumCast::from(0).unwrap() || substraction_row[cell_number] == NumCast::from(0).unwrap()) { // quickly tested on some sparse matrices but seem to really boost performance . In some more filled ones: around 50x improvemnt, ful matrix not tested yet
             self[cell_number] = self[cell_number] - substraction_row[cell_number];
@@ -1315,6 +1345,37 @@ impl<T: MatrixValues> Row<T> {
         }
     }
 
+}
+
+fn substract_row_with_row<U: AVX2Row<T>, T:MatrixValues>(mut row_a: U, row_b: U){
+    row_a.substraction_f64(row_b)
+}
+
+pub trait AVX2Row<U: AVX2Row<U, T>, T:MatrixValues> {
+    fn substraction_f64(&mut self, substraction_row: Row<f64>) {
+        panic!("this should not be able to run")
+    }
+}
+
+impl<T:MatrixValues> AVX2Row<T> for Row<f64> {
+    fn substraction_f64(&mut self, substraction_row: Row<f64>) {
+        unsafe {substract_avx2_f64(self, substraction_row)}
+    }
+}
+
+#[target_feature(enable = "avx2")]
+unsafe fn substract_avx2_f64(a_row: &mut Row<f64>, substraction_row: Row<f64>) {
+    for cell_number in 0..a_row.cells.len() {
+        // if !(self[cell_number] == NumCast::from(0).unwrap() || substraction_row[cell_number] == NumCast::from(0).unwrap()) { // quickly tested on some sparse matrices but seem to really boost performance . In some more filled ones: around 50x improvemnt, ful matrix not tested yet
+        a_row[cell_number] = a_row[cell_number] - substraction_row[cell_number];
+        // } 
+        assert!(substraction_row.len() % 4 == 0);
+        let mut A_row_base = a_row.cells.as_ptr();
+        let mut B_row_base = substraction_row.cells.as_ptr();
+        for _ in 0..a_row.len() /4{
+            let A_row = _mm256_loadu_pd(A_row_base);
+        }
+    }
 }
 
 impl<T: MatrixValues> Index<usize> for Row<T> {
