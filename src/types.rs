@@ -22,6 +22,7 @@ use rand::distributions::uniform::SampleUniform;
 
 lazy_static!{
     static ref IS_AVX2: bool = is_x86_feature_detected!("avx2");
+    debug;
 }
 
 pub fn abs<T: PartialOrd + NumCast + std::ops::Mul<Output = T>>(value: T) -> T {
