@@ -49,8 +49,6 @@ pub trait RowFunctions<T:MatrixValues> {
     fn addition_row_with_external_row(&mut self, row_to_add_to_this_one:& Row<T>);
     fn normalize_all_elements_to_element(&mut self, index: usize);
     fn normalize_all_elements_to_first(&mut self) ;
-    fn substract_row(&mut self, substraction_row: Row<T>);
-    unsafe fn substract_avx2(&mut self, substraction_row: Row<T>);
     fn substract_all(&mut self, substraction_row: Row<T>);
     fn replace_values(&mut self, index_range: Range<usize>, values: Vec<T>);
 
@@ -131,33 +129,17 @@ macro_rules! impl_row_type {
                 self.normalize_all_elements_to_element(0);
             }
         
-            fn substract_row(&mut self, substraction_row: Row<$T>) {
-                if !(self.cells.len() == substraction_row.cells.len()) {
-                    panic!("Error: Length of substracting row is not equal to row length")
-                }
-                if *IS_AVX2{
-                    unsafe {self.substract_avx2(substraction_row)}
-                } else {
-                    self.substract_all(substraction_row)
-                }
-            }
+            // fn substract_row(&mut self, substraction_row: Row<$T>) {
+            //     if !(self.cells.len() == substraction_row.cells.len()) {
+            //         panic!("Error: Length of substracting row is not equal to row length")
+            //     }
+            //     if *IS_AVX2{
+            //         unsafe {self.substract_avx2(substraction_row)}
+            //     } else {
+            //         self.substract_all(substraction_row)
+            //     }
+            // }
         
-            #[target_feature(enable = "avx2")]
-            unsafe fn substract_avx2(&mut self, substraction_row: Row<$T>) {
-                for cell_number in 0..self.cells.len() {
-                    // if !(self[cell_number] == NumCast::from(0).unwrap() || substraction_row[cell_number] == NumCast::from(0).unwrap()) { // quickly tested on some sparse matrices but seem to really boost performance . In some more filled ones: around 50x improvemnt, ful matrix not tested yet
-                    self[cell_number] = self[cell_number] - substraction_row[cell_number];
-                    // } 
-        
-                    // let test_row = substraction_row.is_f64;
-                    assert!(substraction_row.len() % 4 == 0);
-                    let mut A_row_base = self.cells.as_ptr();
-                    let mut B_row_base = substraction_row.cells.as_ptr();
-                    for _ in 0..self.len() /4{
-                        // let A_row = _mm256_loadu_pd(A_row_base);
-                    }
-                }
-            }
         
             fn substract_all(&mut self, substraction_row: Row<$T>) {
                 for cell_number in 0..self.cells.len() {
@@ -174,6 +156,23 @@ macro_rules! impl_row_type {
                     self.cells[row_index] = values[val_index];
                 }
             }
+        }
+    }
+}
+
+pub trait SpecializedFunctions<T:MatrixValues> {
+    fn substract_row(&mut self, substraction_row: Row<T>) ;
+}
+
+impl SpecializedFunctions<f64> for Row<f64> {
+    fn substract_row(&mut self, substraction_row: Row<f64>) {
+        if !(self.cells.len() == substraction_row.cells.len()) {
+            panic!("Error: Length of substracting row is not equal to row length")
+        }
+        if *IS_AVX2{
+            unsafe {self.substract_avx2(substraction_row)}
+        } else {
+            self.substract_all(substraction_row)
         }
     }
 }

@@ -26,9 +26,11 @@ pub mod linearsolvers;
 pub use linearsolvers::{*};
 pub mod gpuaccalerators;
 pub use gpuaccalerators::{*};
+pub mod cpuaccalerators;
+pub use cpuaccalerators::{*};
 
 use core::{f32};
-use std::arch::x86_64::{_mm256_set_pd, _mm256_loadu_pd};
+use std::arch::x86_64::{_mm256_set_pd, _mm256_load_pd, _mm256_loadu_pd, _mm256_mul_pd, _mm256_store_pd};
 use std::ops::{Index, IndexMut, Deref, Add};
 use std::any::{TypeId};
 use std::sync::Arc;
