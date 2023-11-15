@@ -160,22 +160,6 @@ macro_rules! impl_row_type {
     }
 }
 
-pub trait SpecializedFunctions<T:MatrixValues> {
-    fn substract_row(&mut self, substraction_row: Row<T>) ;
-}
-
-impl SpecializedFunctions<f64> for Row<f64> {
-    fn substract_row(&mut self, substraction_row: Row<f64>) {
-        if !(self.cells.len() == substraction_row.cells.len()) {
-            panic!("Error: Length of substracting row is not equal to row length")
-        }
-        if *IS_AVX2{
-            unsafe {self.substract_avx2(substraction_row)}
-        } else {
-            self.substract_all(substraction_row)
-        }
-    }
-}
 
 impl_row_type!(i8);
 impl_row_type!(i16);

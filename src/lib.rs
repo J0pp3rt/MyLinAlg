@@ -4,6 +4,10 @@ lazy_static!{
     static ref IS_AVX2: bool = is_x86_feature_detected!("avx2");
 }
 
+lazy_static!{
+    static ref IS_64X: bool = cfg!(target_pointer_width = "64");
+}
+
 #[macro_use]
 extern crate lazy_static;
 
@@ -30,7 +34,10 @@ pub mod cpuaccalerators;
 pub use cpuaccalerators::{*};
 
 use core::{f32};
-use std::arch::x86_64::{_mm256_set_pd, _mm256_load_pd, _mm256_loadu_pd, _mm256_mul_pd, _mm256_store_pd};
+
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::*;
+
 use std::ops::{Index, IndexMut, Deref, Add};
 use std::any::{TypeId};
 use std::sync::Arc;
