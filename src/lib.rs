@@ -1,4 +1,6 @@
 #![allow(non_snake_case)]
+#![feature(stdsimd)]
+#![feature(portable_simd)]
 
 lazy_static!{
     static ref IS_AVX2: bool = is_x86_feature_detected!("avx2");

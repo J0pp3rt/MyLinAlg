@@ -133,7 +133,7 @@ macro_rules! impl_linear_solve_for_type {
             let time_Lmake_1 = start_Lmake.elapsed();
 
             let test1 = Instant::now();
-            let x = Matrix::new_square_with_constant_values(matrix_size, 0.1 as f64);
+            let x = Matrix::new_square_with_constant_values(matrix_size, 1 as $T);
             let time_test1 = test1.elapsed();
             println!("time test 1 {:?}", time_test1);
 

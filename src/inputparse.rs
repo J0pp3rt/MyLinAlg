@@ -115,7 +115,7 @@ macro_rules! impl_input_parse_for_type {
     };
 }
 
-impl_input_parse_for_type!(f64);
+impl_input_parse_for_type!(i64);
 
 // impl<T> InputTraitRowCol<T> for Range<i32> {
 //     fn parse_input(&self) -> Vec<usize> {
