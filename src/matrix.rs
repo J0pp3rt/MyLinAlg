@@ -33,6 +33,110 @@ impl<T> MatrixValues for T where T: Copy + Display + PartialEq + Num + NumCast +
 
 // impl_add_matrix!(f64);
 
+pub trait InputMatrixFunctions<T:MatrixValues> {
+    
+}
+
+macro_rules! impl_matrix_functions_per_type {
+    ($T: ident) => {
+        impl InputMatrix<$T> for Vec<Vec<$T>> {
+            fn parse_input(&self) -> Matrix<$T> {
+                let mut rows = Vec::<Row<$T>>::with_capacity(self.len());
+                for row in self{
+                    rows.push( Row { cells : row.to_vec()});
+                }
+                Matrix { rows}
+            }
+
+
+        }
+
+        impl InputMatrix<$T> for Vec<$T> {
+            // let row = vec!{Row{ cells : self.to_vec()}};
+            fn parse_input(&self) -> Matrix<$T> {
+                Matrix { rows: vec!{Row{ cells : self.to_vec()}}}
+            }
+        }
+
+        impl InputMatrix<$T> for &Vec<$T> {
+            fn parse_input(&self) -> Matrix<$T> {
+                    let row = vec!{Row{ cells : self.to_vec()}};
+        
+                    Matrix { rows: row}
+                
+            }
+        }
+
+        impl InputMatrix<$T> for Matrix<$T> {
+            fn parse_input(&self) -> Matrix<$T> {
+                    self.clone()
+            }
+        }
+
+        impl InputMatrix<$T> for Collumn<$T> {
+            fn parse_input(&self) -> Matrix<$T> {
+                    let contents_clone = Collumn::new_form_vec(self.to_vec());
+                    Matrix::new_from_collumn(contents_clone)
+                    // TODO: THIS IS A GROSS SOLUTION BUT THE COMPILER IS HAPPY IG
+                
+            }
+        }
+    };
+}
+
+pub trait InputMatrix<T: MatrixValues> { // can not be realisticly implemeted for lists because length of list must be hardcoded -> just use vecs :(
+    fn parse_input(&self) -> Matrix<T> {
+        panic!()
+    }
+}
+
+// impl InputMatrixFunctions for Vec<Vec<T>> {
+//     fn parse_input(&self) -> Matrix<T> {
+//         let mut rows = Vec::<Row<T>>::with_capacity(self.len());
+//         for row in self{
+//             rows.push( Row { cells : row.to_vec()});
+//         }
+//         Matrix { rows}
+//     }
+// }
+
+// impl InputMatrixFunctions for Vec<T> {
+//     fn parse_input(&self) -> Matrix<T> {
+//             let vac = self.to_vec();
+//             let row = vec!{Row{ cells : vac}};
+
+//             Matrix { rows: row}
+        
+//     }
+// }
+
+// impl<T: MatrixValues> InputMatrix<T> for &Vec<T> {
+//     fn parse_input(&self) -> Matrix<T> {
+//             let row = vec!{Row{ cells : self.to_vec()}};
+
+//             Matrix { rows: row}
+        
+//     }
+// }
+
+// impl<T: MatrixValues> InputMatrix<T> for Matrix<T> {
+//     fn parse_input(&self) -> Matrix<T> {
+//             self.clone()
+//     }
+// }
+
+// impl<T: MatrixValues> InputMatrix<T> for Collumn<T> {
+//     fn parse_input(&self) -> Matrix<T> {
+//             let contents_clone = Collumn::new_form_vec(self.to_vec());
+//             Matrix::new_from_collumn(contents_clone)
+//             // TODO: THIS IS A GROSS SOLUTION BUT THE COMPILER IS HAPPY IG
+        
+//     }
+// }
+
+// fn parse_matrix_input<T: MatrixValues>(input: impl InputMatrix<T>) -> Matrix<T> {
+//     input.parse_input()
+// }
 
 
 pub trait MatrixFunctions<T:MatrixValues> {
@@ -60,7 +164,7 @@ pub trait MatrixFunctions<T:MatrixValues> {
     fn swap_rows(&mut self, row_1: usize, row_2: usize);
     fn substract_internal_row_from_row_by_index(&mut self, row_number_to_substract: usize, from_row_number: usize);
     fn substract_multiplied_internal_row_from_row_by_index(&mut self, row_number_to_substract_with: usize, factor: T , from_row_number: usize) ;
-    fn substract_multiplied_internal_row_from_row_by_index_with_collumn_range<U>(&mut self, row_number_to_substract_with: usize, factor: T , from_row_number: usize, collumn_range: U) where  U: InputTraitRowCol<U> ;
+    fn substract_multiplied_internal_row_from_row_by_index_with_collumn_range(&mut self, row_number_to_substract_with: usize, factor: T , from_row_number: usize, collumn_range: impl InputTraitRowCol)  ;
     fn new_from_solver(system_of_equations : Solver2D<T>) -> Solved2D<T>;
     fn transpose_square(&mut self) -> &Self ;
     fn transpose_non_skinny(&mut self) -> &Self;
@@ -75,8 +179,11 @@ pub trait MatrixFunctions<T:MatrixValues> {
     fn append_row_from_vec(&mut self, new_row_vec: Vec<T>);
     fn multiply_all_elements_by(&mut self, factor: T) -> &Self;
     fn divide_all_elements_by(&mut self, factor: T);
+    fn update(&mut self, rows: impl InputTraitRowCol, colls: impl InputTraitRowCol, new_values: impl InputMatrix<T>);
 
 }
+
+
 
 macro_rules! impl_matrix_functions_for_type {
     ($T: ident) => {
@@ -303,8 +410,7 @@ macro_rules! impl_matrix_functions_for_type {
             self[from_row_number].substract_row(mutliplied_row_to_substract)
         }
     
-        fn substract_multiplied_internal_row_from_row_by_index_with_collumn_range<U>(&mut self, row_number_to_substract_with: usize, factor: $T , from_row_number: usize, collumn_range: U)
-        where  U: InputTraitRowCol<U> {
+        fn substract_multiplied_internal_row_from_row_by_index_with_collumn_range(&mut self, row_number_to_substract_with: usize, factor: $T , from_row_number: usize, collumn_range: impl InputTraitRowCol){
             let colls_input:Vec<usize> = parse_dimension_input(collumn_range);
     
             for collumn_index in colls_input.iter(){
@@ -454,9 +560,72 @@ macro_rules! impl_matrix_functions_for_type {
                 self.rows[row_number].divide_all_elements_by(factor)
             }
         }
+
+        fn update(&mut self, rows: impl InputTraitRowCol, colls: impl InputTraitRowCol, new_values: impl InputMatrix<$T>) {
+                    let rows_input:Vec<usize> = parse_dimension_input(rows);
+                    let colls_input:Vec<usize> = parse_dimension_input(colls);
+                    let matrix_input:Matrix<$T> = new_values.parse_input();
+                
+                    // checking whether input matrix matches given dimensions:
+                
+                    if !(rows_input.len() == matrix_input.coll_length()) {
+                        println!("Error: Given row range does not match given values ");
+                        println!("Specified length = {:?}, given matrix is = {:?}", rows_input.len(), matrix_input.coll_length());
+                        panic!()
+                    } else if !(colls_input.len() == matrix_input.row_length()) {
+                        println!("Error: Given collumn range does not match given values ");
+                        panic!()
+                    }
+                
+                    let mut i : usize = 0;
+                    let mut j : usize = 0;
+                    for row in rows_input.iter() {
+                        j = 0; // seems like i missed this, not 100% sure.
+                        for coll in &colls_input {
+                            self[*row][*coll] = matrix_input[i][j];
+                            j += 1;
+                        }
+                        i += 1;
+                    }
+
+        }
         }
     };
 }
+
+// fn update(&mut self, rows: U, colls: V, new_values: W) 
+// where  U: InputTraitRowCol<U>,
+// V: InputTraitRowCol<V>,
+// W: InputMatrix<W, $T>
+// {
+//     let rows_input:Vec<usize> = parse_dimension_input(rows);
+//     let colls_input:Vec<usize> = parse_dimension_input(colls);
+//     let matrix_input:Matrix<$T> = parse_matrix_input(new_values);
+
+//     // checking whether input matrix matches given dimensions:
+
+//     if !(rows_input.len() == matrix_input.coll_length()) {
+//         println!("Error: Given row range does not match given values ");
+//         println!("Specified length = {:?}, given matrix is = {:?}", rows_input.len(), matrix_input.coll_length());
+//         panic!()
+//     } else if !(colls_input.len() == matrix_input.row_length()) {
+//         println!("Error: Given collumn range does not match given values ");
+//         panic!()
+//     }
+
+//     let mut i : usize = 0;
+//     let mut j : usize = 0;
+//     for row in &rows_input {
+//         j = 0; // seems like i missed this, not 100% sure.
+//         let mut working_row_self = self[*row];
+//         let working_row_input = matrix_input[i];
+//         for coll in &colls_input {
+//             working_row_self[*coll] = working_row_input[j];
+//             j += 1;
+//         }
+//         i += 1;
+//     }
+// }
 
 impl_matrix_functions_for_type!(i8);
 impl_matrix_functions_for_type!(i16);
@@ -473,6 +642,22 @@ impl_matrix_functions_for_type!(usize);
 
 impl_matrix_functions_for_type!(f32);
 impl_matrix_functions_for_type!(f64);
+
+impl_matrix_functions_per_type!(i8);
+impl_matrix_functions_per_type!(i16);
+impl_matrix_functions_per_type!(i32);
+impl_matrix_functions_per_type!(i64);
+
+impl_matrix_functions_per_type!(u8);
+impl_matrix_functions_per_type!(u16);
+impl_matrix_functions_per_type!(u32);
+impl_matrix_functions_per_type!(u64);
+
+impl_matrix_functions_per_type!(isize);
+impl_matrix_functions_per_type!(usize);
+
+impl_matrix_functions_per_type!(f32);
+impl_matrix_functions_per_type!(f64);
 
 impl<T: MatrixValues> Index<usize> for Matrix< T> {
     type Output = Row<T>;

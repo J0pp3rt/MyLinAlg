@@ -4,13 +4,13 @@
 
 use crate::*;
 
-pub trait InputTraitRowCol<T> {
+pub trait InputTraitRowCol {
     fn parse_input(&self) -> Vec<usize> {
         panic!()
     }
 }
 
-pub fn parse_dimension_input<T: InputTraitRowCol<T>>(input: T) -> Vec<usize> {
+pub fn parse_dimension_input(input: impl InputTraitRowCol) -> Vec<usize> {
     input.parse_input()
 }
 
@@ -24,7 +24,7 @@ pub fn parse_dimension_input<T: InputTraitRowCol<T>>(input: T) -> Vec<usize> {
 //     input.parse_input()
 // }
 
-impl InputTraitRowCol<Range<i32>> for Range<i32> {
+impl InputTraitRowCol for Range<i32> {
     fn parse_input(&self) -> Vec<usize> {
         let mut output_vec = Vec::<usize>::with_capacity(self.len());
         for index in self.clone() {
@@ -34,7 +34,7 @@ impl InputTraitRowCol<Range<i32>> for Range<i32> {
     }
 }
 
-impl InputTraitRowCol<Range<usize>> for Range<usize> {
+impl InputTraitRowCol for Range<usize> {
     fn parse_input(&self) -> Vec<usize> {
         let mut output_vec = Vec::<usize>::with_capacity(self.len());
         for index in self.clone() {
@@ -44,20 +44,20 @@ impl InputTraitRowCol<Range<usize>> for Range<usize> {
     }
 }
 
-impl InputTraitRowCol<Vec<usize>> for Vec<usize> {
+impl InputTraitRowCol for Vec<usize> {
     fn parse_input(&self) -> Vec<usize> 
     {
         self.clone()
     }
 }
 
-impl InputTraitRowCol<i32> for i32 {
+impl InputTraitRowCol for i32 {
     fn parse_input(&self) -> Vec<usize> {
         vec![self.clone() as usize]
     }
 }
 
-impl InputTraitRowCol<usize> for usize {
+impl InputTraitRowCol for usize {
     fn parse_input(&self) -> Vec<usize> {
         vec![self.clone()]
     }

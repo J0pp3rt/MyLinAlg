@@ -525,8 +525,10 @@ macro_rules! impl_SIMDFunctions_per_type {
             #[target_feature(enable = "avx2")]
             unsafe fn substract_avx2_row(&mut self, substracting_row: Row<$T>) {
                 let n_elements = AVX2_type_amount!($T);
+                println!("substract row cells len() = {}, %4 = {}, ==0 = {}", substracting_row.cells.len(), substracting_row.cells.len() % 4, substracting_row.cells.len() % 4 == 0);
+                assert!(substracting_row.cells.len() % 4 == 0);
                 for group_number in (0..self.cells.len()).step_by(4) {
-                    assert!(substracting_row.cells.len() % 4 == 0);
+                    println!("loop");
                     let mut A_row_base = self.cells[group_number..group_number+n_elements].as_mut_ptr();
                     let mut B_row_base = substracting_row.cells[group_number..group_number+n_elements].as_ptr();
                     let A_row = <$T>::_mm_load(A_row_base);

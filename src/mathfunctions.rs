@@ -142,18 +142,18 @@ macro_rules! impl_math_functions_per_type {
     };
 }
 
-// impl_math_functions_per_type!(i8);
-// impl_math_functions_per_type!(i16);
-// impl_math_functions_per_type!(i32);
+impl_math_functions_per_type!(i8);
+impl_math_functions_per_type!(i16);
+impl_math_functions_per_type!(i32);
 impl_math_functions_per_type!(i64);
 
-// impl_math_functions_per_type!(u8);
-// impl_math_functions_per_type!(u16);
-// impl_math_functions_per_type!(u32);
-// impl_math_functions_per_type!(u64);
+impl_math_functions_per_type!(u8);
+impl_math_functions_per_type!(u16);
+impl_math_functions_per_type!(u32);
+impl_math_functions_per_type!(u64);
 
-// impl_math_functions_per_type!(isize);
-// impl_math_functions_per_type!(usize);
+impl_math_functions_per_type!(isize);
+impl_math_functions_per_type!(usize);
 
-// impl_math_functions_per_type!(f32);
-// impl_math_functions_per_type!(f64);
+impl_math_functions_per_type!(f32);
+impl_math_functions_per_type!(f64);
