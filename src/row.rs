@@ -95,20 +95,30 @@ macro_rules! impl_row_type {
             }
         
             fn divide_all_elements_by(&mut self, value: $T) {
-                for n in 0..self.cells.len() {
-                    // if !(self.cells[n] == NumCast::from(0).unwrap()) {// quickly tested on some sparse matrices but seem to really boost performance. In some more filled ones: around 50x improvemnt, ful matrix not tested yet
-                        self.cells[n] = self.cells[n] / value;
-                    // }
+
+                if *IS_AVX512 && USE_OPIMIZERS{
+                    unsafe {self.const_multiply_avx512_row(1 as $T/value)}
+                } else {
+
+                    for n in 0..self.cells.len() {
+                        // if !(self.cells[n] == NumCast::from(0).unwrap()) {// quickly tested on some sparse matrices but seem to really boost performance. In some more filled ones: around 50x improvemnt, ful matrix not tested yet
+                            self.cells[n] = self.cells[n] / value;
+                        // }
+                    }
                 }
             }
         
             fn multiply_all_elements_by(&mut self, value: $T) -> &Self{
-                for n in 0..self.cells.len() {
-                    // if !(self.cells[n] == NumCast::from(0).unwrap()) {// quickly tested on some sparse matrices but seem to really boost performance. In some more filled ones: around 50x improvemnt, ful matrix not tested yet
-                    self.cells[n] = self.cells[n] * value;
-                    // }
+
+                if *IS_AVX512 && USE_OPIMIZERS{
+                    unsafe {self.const_multiply_avx512_row(value)}
+                } else {
+                    for n in 0..self.cells.len() {
+                        // if !(self.cells[n] == NumCast::from(0).unwrap()) {// quickly tested on some sparse matrices but seem to really boost performance. In some more filled ones: around 50x improvemnt, ful matrix not tested yet
+                        self.cells[n] = self.cells[n] * value;
+                        // }
+                    }
                 }
-        
                 self
             }
         
@@ -134,7 +144,9 @@ macro_rules! impl_row_type {
                 if !(self.cells.len() == substraction_row.cells.len()) {
                     panic!("Error: Length of substracting row is not equal to row length")
                 }
-                if *IS_AVX2{
+                if *IS_AVX512 && USE_OPIMIZERS{
+                    unsafe {self.substract_avx512_row(substraction_row)}
+                } else if *IS_AVX2 && USE_OPIMIZERS{
                     unsafe {self.substract_avx2_row(substraction_row)}
                 } else {
                     self.substract_all(substraction_row)

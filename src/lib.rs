@@ -1,14 +1,20 @@
 #![allow(non_snake_case)]
 #![feature(stdsimd)]
 #![feature(portable_simd)]
+#![feature(avx512_target_feature)]
 
 lazy_static!{
     static ref IS_AVX2: bool = is_x86_feature_detected!("avx2");
 }
 
 lazy_static!{
+    static ref IS_AVX512: bool = is_x86_feature_detected!("avx512f");
+}
+
+lazy_static!{
     static ref IS_64X: bool = cfg!(target_pointer_width = "64");
 }
+static USE_OPIMIZERS: bool = true;
 
 #[macro_use]
 extern crate lazy_static;

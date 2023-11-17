@@ -1,6 +1,6 @@
 use crate::*;
 
-use std::simd::{*};
+use std::{simd::{*}, arch::x86_64};
 
 
 
@@ -79,24 +79,81 @@ macro_rules! AVX2_type_amount {
     };
 }
 
+macro_rules! AVX512_type_amount {
+    ($T: ty) => {
+        match <$T>::get_type_enum() {
+            SupportedTypes::I8 => {
+                64 as usize
+            },
+            SupportedTypes::I16 => {
+                32 as usize
+            }
+            SupportedTypes::I32 => {
+                16 as usize
+            },
+            SupportedTypes::I64 => {
+                8 as usize
+            },
+            SupportedTypes::U8 => {
+                64 as usize
+            },
+            SupportedTypes::U16 => {
+                32 as usize
+            }
+            SupportedTypes::U32 => {
+                16 as usize
+            },
+            SupportedTypes::U64 => {
+                8 as usize
+            },
+            SupportedTypes::Usize => {
+                8 as usize
+            },
+            SupportedTypes::Isize => {
+                8 as usize
+            }
+            SupportedTypes::F32 => {
+                16 as usize
+            },
+            SupportedTypes::F64 => {
+                8 as usize
+            },
+        }
+    };
+}
+
 enum AVX2Stores {
     M256(__m256),
     M256d(__m256d),
     M256i(__m256i)
 }
 
+enum AVX512Stores {
+    M512(__m512),
+    M512d(__m512d),
+    M512i(__m512i)
+}
+
 trait AVX2Functions {
-    unsafe fn _mm_load(values_pointer: *const Self) -> AVX2Stores where Self: Sized;
-    unsafe fn _mm_add(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores;
-    unsafe fn _mm_store(memory_pointer: *mut Self, values_to_store: AVX2Stores) ;
+    unsafe fn _mm_load_avx2(values_pointer: *const Self) -> AVX2Stores where Self: Sized;
+    unsafe fn _mm_add_avx2(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores;
+    unsafe fn _mm_store_avx2(memory_pointer: *mut Self, values_to_store: AVX2Stores) ;
+}
+
+trait AVX512Functions {
+    unsafe fn _mm_load_avx512(values_pointer: *const Self) -> AVX512Stores where Self: Sized;
+    unsafe fn _mm_add_avx512(row_A: AVX512Stores, row_B: AVX512Stores) -> AVX512Stores;
+    unsafe fn _mm_store_avx512(memory_pointer: *mut Self, values_to_store: AVX512Stores) ;
+    unsafe fn _mm_set_avx512(value: Self) -> AVX512Stores;
+    unsafe fn _mm_mult_avx512(row_A: AVX512Stores, row_B: &AVX512Stores) -> AVX512Stores;
 }
 
 impl AVX2Functions for i8 {
-    unsafe fn _mm_load(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
+    unsafe fn _mm_load_avx2(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
         AVX2Stores::M256i(_mm256_loadu_epi8(values_pointer))
     }
 
-    unsafe fn _mm_add(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
+    unsafe fn _mm_add_avx2(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
         match (row_A,row_B) {
             (AVX2Stores::M256i(row_A_store), AVX2Stores::M256i(row_B_store) )=> {
                 AVX2Stores::M256i(_mm256_add_epi8(row_A_store, row_B_store))
@@ -105,7 +162,7 @@ impl AVX2Functions for i8 {
         }
     }
 
-    unsafe fn _mm_store(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
+    unsafe fn _mm_store_avx2(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
         match values_to_store {
             AVX2Stores::M256i(values_to_store_value) => {
                 _mm256_storeu_epi8(memory_pointer, values_to_store_value)
@@ -116,11 +173,11 @@ impl AVX2Functions for i8 {
     
 }
 impl AVX2Functions for i16 {
-    unsafe fn _mm_load(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
+    unsafe fn _mm_load_avx2(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
         AVX2Stores::M256i(_mm256_loadu_epi16(values_pointer))
     }
 
-    unsafe fn _mm_add(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
+    unsafe fn _mm_add_avx2(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
         match (row_A,row_B) {
             (AVX2Stores::M256i(row_A_store), AVX2Stores::M256i(row_B_store) )=> {
                 AVX2Stores::M256i(_mm256_add_epi16(row_A_store, row_B_store))
@@ -129,7 +186,7 @@ impl AVX2Functions for i16 {
         }
     }
 
-    unsafe fn _mm_store(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
+    unsafe fn _mm_store_avx2(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
         match values_to_store {
             AVX2Stores::M256i(values_to_store_value) => {
                 _mm256_storeu_epi16(memory_pointer, values_to_store_value)
@@ -140,11 +197,11 @@ impl AVX2Functions for i16 {
 }
 
 impl AVX2Functions for i32 {
-    unsafe fn _mm_load(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
+    unsafe fn _mm_load_avx2(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
         AVX2Stores::M256i(_mm256_load_epi32(values_pointer))
     }
 
-    unsafe fn _mm_add(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
+    unsafe fn _mm_add_avx2(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
         match (row_A,row_B) {
             (AVX2Stores::M256i(row_A_store), AVX2Stores::M256i(row_B_store) )=> {
                 AVX2Stores::M256i(_mm256_add_epi32(row_A_store, row_B_store))
@@ -153,7 +210,7 @@ impl AVX2Functions for i32 {
         }
     }
 
-    unsafe fn _mm_store(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
+    unsafe fn _mm_store_avx2(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
         match values_to_store {
             AVX2Stores::M256i(values_to_store_value) => {
                 _mm256_store_epi32(memory_pointer, values_to_store_value)
@@ -163,11 +220,11 @@ impl AVX2Functions for i32 {
     }
 }
 impl AVX2Functions for i64 {
-    unsafe fn _mm_load(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
+    unsafe fn _mm_load_avx2(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
         AVX2Stores::M256i(_mm256_load_epi64(values_pointer))
     }
 
-    unsafe fn _mm_add(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
+    unsafe fn _mm_add_avx2(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
         match (row_A,row_B) {
             (AVX2Stores::M256i(row_A_store), AVX2Stores::M256i(row_B_store) )=> {
                 AVX2Stores::M256i(_mm256_add_epi64(row_A_store, row_B_store))
@@ -176,7 +233,7 @@ impl AVX2Functions for i64 {
         }
     }
 
-    unsafe fn _mm_store(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
+    unsafe fn _mm_store_avx2(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
         match values_to_store {
             AVX2Stores::M256i(values_to_store_value) => {
                 _mm256_store_epi64(memory_pointer, values_to_store_value)
@@ -187,11 +244,11 @@ impl AVX2Functions for i64 {
 }
 
 impl AVX2Functions for u8 {
-    unsafe fn _mm_load(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
+    unsafe fn _mm_load_avx2(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
         AVX2Stores::M256i(__m256i::from(u8x32::from_slice(&[*values_pointer])))
     }
 
-    unsafe fn _mm_add(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
+    unsafe fn _mm_add_avx2(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
         match (row_A,row_B) {
             (AVX2Stores::M256i(row_A_store), AVX2Stores::M256i(row_B_store) )=> {
                 AVX2Stores::M256i(_mm256_adds_epu8(row_A_store, row_B_store))
@@ -200,7 +257,7 @@ impl AVX2Functions for u8 {
         }
     }
 
-    unsafe fn _mm_store(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
+    unsafe fn _mm_store_avx2(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
         match values_to_store {
             AVX2Stores::M256i(values_to_store_value) => {
                 // unsafe{_mm256_storeu_epi8(memory_pointer, values_to_store_value)}
@@ -212,11 +269,11 @@ impl AVX2Functions for u8 {
 }
 
 impl AVX2Functions for u16 {
-    unsafe fn _mm_load(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
+    unsafe fn _mm_load_avx2(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
         AVX2Stores::M256i(__m256i::from(u16x16::from_slice(&[*values_pointer])))
     }
 
-    unsafe fn _mm_add(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
+    unsafe fn _mm_add_avx2(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
         match (row_A,row_B) {
             (AVX2Stores::M256i(row_A_store), AVX2Stores::M256i(row_B_store) )=> {
                 AVX2Stores::M256i(_mm256_adds_epu16(row_A_store, row_B_store))
@@ -225,7 +282,7 @@ impl AVX2Functions for u16 {
         }
     }
 
-    unsafe fn _mm_store(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
+    unsafe fn _mm_store_avx2(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
         match values_to_store {
             AVX2Stores::M256i(values_to_store_value) => {
                 // unsafe{_mm256_storeu_epi8(memory_pointer, values_to_store_value)}
@@ -237,11 +294,11 @@ impl AVX2Functions for u16 {
 }
 
 impl AVX2Functions for u32 {
-    unsafe fn _mm_load(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
+    unsafe fn _mm_load_avx2(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
         AVX2Stores::M256i(__m256i::from(u32x8::from_slice(&[*values_pointer])))
     }
 
-    unsafe fn _mm_add(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
+    unsafe fn _mm_add_avx2(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
         match (row_A,row_B) {
             (AVX2Stores::M256i(row_A_store), AVX2Stores::M256i(row_B_store) )=> {
                 // AVX2Stores::M256i(_mm256_adds_epu32(row_A_store, row_B_store))
@@ -251,7 +308,7 @@ impl AVX2Functions for u32 {
         }
     }
 
-    unsafe fn _mm_store(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
+    unsafe fn _mm_store_avx2(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
         match values_to_store {
             AVX2Stores::M256i(values_to_store_value) => {
                 // unsafe{_mm256_storeu_epi8(memory_pointer, values_to_store_value)}
@@ -262,11 +319,11 @@ impl AVX2Functions for u32 {
     }
 }
 impl AVX2Functions for u64 {
-    unsafe fn _mm_load(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
+    unsafe fn _mm_load_avx2(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
         AVX2Stores::M256i(__m256i::from(u64x4::from_slice(&[*values_pointer])))
     }
 
-    unsafe fn _mm_add(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
+    unsafe fn _mm_add_avx2(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
         match (row_A,row_B) {
             (AVX2Stores::M256i(row_A_store), AVX2Stores::M256i(row_B_store) )=> {
                 // AVX2Stores::M256i(_mm256_adds_epu64(row_A_store, row_B_store))
@@ -276,7 +333,7 @@ impl AVX2Functions for u64 {
         }
     }
 
-    unsafe fn _mm_store(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
+    unsafe fn _mm_store_avx2(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
         match values_to_store {
             AVX2Stores::M256i(values_to_store_value) => {
                 // unsafe{_mm256_storeu_epi8(memory_pointer, values_to_store_value)}
@@ -287,11 +344,11 @@ impl AVX2Functions for u64 {
     }
 }
 impl AVX2Functions for isize {
-    unsafe fn _mm_load(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
+    unsafe fn _mm_load_avx2(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
         AVX2Stores::M256i(__m256i::from(i64x4::from_slice(&[*values_pointer as i64])))
     }
 
-    unsafe fn _mm_add(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
+    unsafe fn _mm_add_avx2(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
         match (row_A,row_B) {
             (AVX2Stores::M256i(row_A_store), AVX2Stores::M256i(row_B_store) )=> {
                 AVX2Stores::M256i(_mm256_add_epi64(row_A_store, row_B_store))
@@ -300,7 +357,7 @@ impl AVX2Functions for isize {
         }
     }
 
-    unsafe fn _mm_store(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
+    unsafe fn _mm_store_avx2(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
         match values_to_store {
             AVX2Stores::M256i(values_to_store_value) => {
                 _mm256_store_epi64(memory_pointer as *mut i64, values_to_store_value)
@@ -310,11 +367,11 @@ impl AVX2Functions for isize {
     }
 }
 impl AVX2Functions for usize {
-    unsafe fn _mm_load(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
+    unsafe fn _mm_load_avx2(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
         AVX2Stores::M256i(__m256i::from(u64x4::from_slice(&[*values_pointer as u64])))
     }
 
-    unsafe fn _mm_add(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
+    unsafe fn _mm_add_avx2(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
         match (row_A,row_B) {
             (AVX2Stores::M256i(row_A_store), AVX2Stores::M256i(row_B_store) )=> {
                 // AVX2Stores::M256i(_mm256_adds_epu64(row_A_store, row_B_store))
@@ -324,7 +381,7 @@ impl AVX2Functions for usize {
         }
     }
 
-    unsafe fn _mm_store(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
+    unsafe fn _mm_store_avx2(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
         match values_to_store {
             AVX2Stores::M256i(values_to_store_value) => {
                 // unsafe{_mm256_storeu_epi8(memory_pointer, values_to_store_value)}
@@ -335,11 +392,11 @@ impl AVX2Functions for usize {
     }
 }
 impl AVX2Functions for f32 {
-    unsafe fn _mm_load(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
+    unsafe fn _mm_load_avx2(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
         AVX2Stores::M256(_mm256_load_ps(values_pointer))
     }
 
-    unsafe fn _mm_add(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
+    unsafe fn _mm_add_avx2(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
         match (row_A,row_B) {
             (AVX2Stores::M256(row_A_store), AVX2Stores::M256(row_B_store) )=> {
                 AVX2Stores::M256(_mm256_add_ps(row_A_store, row_B_store))
@@ -348,7 +405,7 @@ impl AVX2Functions for f32 {
         }
     }
 
-    unsafe fn _mm_store(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
+    unsafe fn _mm_store_avx2(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
         match values_to_store {
             AVX2Stores::M256(values_to_store_value) => {
                 _mm256_store_ps(memory_pointer, values_to_store_value)
@@ -358,27 +415,100 @@ impl AVX2Functions for f32 {
     }
 }
 impl AVX2Functions for f64 {
-    unsafe fn _mm_load(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
-        AVX2Stores::M256d(_mm256_load_pd(values_pointer))
+    unsafe fn _mm_load_avx2(values_pointer: *const Self) -> AVX2Stores where Self: Sized {
+        AVX2Stores::M256d(_mm256_loadu_pd(values_pointer))
     }
 
-    unsafe fn _mm_add(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
+    unsafe fn _mm_add_avx2(row_A: AVX2Stores, row_B: AVX2Stores) -> AVX2Stores {
         match (row_A,row_B) {
             (AVX2Stores::M256d(row_A_store), AVX2Stores::M256d(row_B_store) )=> {
-                AVX2Stores::M256d(_mm256_add_pd(row_A_store, row_B_store))
+                AVX2Stores::M256d(_mm256_sub_pd(row_A_store, row_B_store))
             },
             _ => {panic!("The stores are not of right kind!")}
         }
     }
 
-    unsafe fn _mm_store(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
+    unsafe fn _mm_store_avx2(memory_pointer: *mut Self, values_to_store: AVX2Stores)  {
         match values_to_store {
             AVX2Stores::M256d(values_to_store_value) => {
-                _mm256_store_pd(memory_pointer, values_to_store_value)
+                _mm256_storeu_pd(memory_pointer, values_to_store_value)
             },
             _ => panic!("AVX2 store is of wrong kind!")
         }
     }
+}
+
+impl AVX512Functions for f64 {
+    unsafe fn _mm_load_avx512(values_pointer: *const Self) -> AVX512Stores where Self: Sized {
+        AVX512Stores::M512d(_mm512_loadu_pd(values_pointer))
+    }
+
+    unsafe fn _mm_add_avx512(row_A: AVX512Stores, row_B: AVX512Stores) -> AVX512Stores {
+        match (row_A,row_B) {
+            (AVX512Stores::M512d(row_A_store), AVX512Stores::M512d(row_B_store) )=> {
+                AVX512Stores::M512d(_mm512_sub_pd(row_A_store, row_B_store))
+            },
+            _ => {panic!("The stores are not of right kind!")}
+        }
+    }
+
+    unsafe fn _mm_store_avx512(memory_pointer: *mut Self, values_to_store: AVX512Stores)  {
+        match values_to_store {
+            AVX512Stores::M512d(values_to_store_value) => {
+                _mm512_storeu_pd(memory_pointer, values_to_store_value)
+            },
+            _ => panic!("AVX2 store is of wrong kind!")
+        }
+    }
+
+    unsafe fn _mm_set_avx512(value: f64) -> AVX512Stores {
+        AVX512Stores::M512d(_mm512_set1_pd(value))
+    }
+
+    unsafe fn _mm_mult_avx512(row_A: AVX512Stores, row_B: &AVX512Stores) -> AVX512Stores {
+        match (row_A,row_B) {
+            (AVX512Stores::M512d(row_A_store), AVX512Stores::M512d(row_B_store) )=> {
+                AVX512Stores::M512d(_mm512_mul_pd(row_A_store, *row_B_store))
+            },
+            _ => {panic!("The stores are not of right kind!")}
+        }
+    }
+}
+
+macro_rules! lazy_avx512 {
+    ($T: ident) => {
+        impl AVX512Functions for $T {
+            unsafe fn _mm_load_avx512(values_pointer: *const Self) -> AVX512Stores where Self: Sized {
+                panic!()
+            }
+        
+            unsafe fn _mm_add_avx512(row_A: AVX512Stores, row_B: AVX512Stores) -> AVX512Stores {
+                match (row_A,row_B) {
+                    (AVX512Stores::M512d(row_A_store), AVX512Stores::M512d(row_B_store) )=> {
+                        AVX512Stores::M512d(_mm512_sub_pd(row_A_store, row_B_store))
+                    },
+                    _ => {panic!("The stores are not of right kind!")}
+                }
+            }
+        
+            unsafe fn _mm_store_avx512(memory_pointer: *mut Self, values_to_store: AVX512Stores)  {
+                match values_to_store {
+                    AVX512Stores::M512d(values_to_store_value) => {
+                        panic!()
+                    },
+                    _ => panic!("AVX2 store is of wrong kind!")
+                }
+            }
+
+            unsafe fn _mm_set_avx512(value: $T) -> AVX512Stores {
+                panic!();
+            }
+
+            unsafe fn _mm_mult_avx512(row_A: AVX512Stores, row_B: &AVX512Stores) -> AVX512Stores {
+                panic!();
+            }
+        }
+    };
 }
 
 // macro_rules! AVX2_mm_load {
@@ -517,28 +647,103 @@ enum SupportedTypes {
 
 pub trait SIMDFunctions<T:MatrixValues> {
     unsafe fn substract_avx2_row(&mut self, substracting_row: Row<T>);
+    unsafe fn substract_avx512_row(&mut self, substracting_row: Row<T>);
+    unsafe fn const_multiply_avx512_row(&mut self, factor: T);
 }
 
 macro_rules! impl_SIMDFunctions_per_type {
     ($T: ty) => {
+        // todo: change all the load to loadu to prevent segfault
+        // cahnge all adds to subs to maintain logic
         impl SIMDFunctions<$T> for Row<$T> {
             #[target_feature(enable = "avx2")]
             unsafe fn substract_avx2_row(&mut self, substracting_row: Row<$T>) {
                 let n_elements = AVX2_type_amount!($T);
-                println!("substract row cells len() = {}, %4 = {}, ==0 = {}", substracting_row.cells.len(), substracting_row.cells.len() % 4, substracting_row.cells.len() % 4 == 0);
-                assert!(substracting_row.cells.len() % 4 == 0);
-                for group_number in (0..self.cells.len()).step_by(4) {
-                    println!("loop");
-                    let mut A_row_base = self.cells[group_number..group_number+n_elements].as_mut_ptr();
-                    let mut B_row_base = substracting_row.cells[group_number..group_number+n_elements].as_ptr();
-                    let A_row = <$T>::_mm_load(A_row_base);
-                    let B_row = <$T>::_mm_load(B_row_base);
+                // println!("self row cells len() = {}, %4 = {}, ==0 = {}", self.cells.len(), self.cells.len() % 4, self.cells.len() % 4 == 0);
+                // println!("substract row cells len() = {}, %4 = {}, ==0 = {}", substracting_row.cells.len(), substracting_row.cells.len() % 4, substracting_row.cells.len() % 4 == 0);
+                // assert!(substracting_row.cells.len() % 4 == 0);
+                // println!("256");
+                for group_number in (0..self.cells.len()).step_by(n_elements) {
+                    // println!("loop");
+                    // println!("what is what: {:?}", &self.cells[group_number..group_number+n_elements]);
+                    let range_of_slices= group_number..group_number+n_elements;
+                    let A_row_base = self.cells[range_of_slices.clone()].as_mut_ptr();
+                    // println!("load_base_1");
+                    let B_row_base = substracting_row.cells[range_of_slices].as_ptr();
+                    // println!("load_base_2");
+                    // dbg!(A_row_base);
+                    let A_row = <$T>::_mm_load_avx2(A_row_base);
+                    // println!("mm_load_1");
+                    let B_row = <$T>::_mm_load_avx2(B_row_base);
+                    // println!("mm_load_2");
         
-                    let result_row = <$T>::_mm_add(A_row, B_row);
+                    let result_row = <$T>::_mm_add_avx2(A_row, B_row);
+                    // println!("mm_add");
         
-                    <$T>::_mm_store(A_row_base, result_row);
+                    <$T>::_mm_store_avx2(A_row_base, result_row);
+                    // println!("mm_store");
         
-                // _mm
+                }
+            }
+
+            #[target_feature(enable = "avx512f")]
+            unsafe fn substract_avx512_row(&mut self, substracting_row: Row<$T>) {
+                let n_elements = AVX512_type_amount!($T);
+                // println!("self row cells len() = {}, %4 = {}, ==0 = {}", self.cells.len(), self.cells.len() % 4, self.cells.len() % 4 == 0);
+                // println!("substract row cells len() = {}, %4 = {}, ==0 = {}", substracting_row.cells.len(), substracting_row.cells.len() % 4, substracting_row.cells.len() % 4 == 0);
+                // assert!(substracting_row.cells.len() % 4 == 0);
+                // println!("512");
+                for group_number in (0..self.cells.len()).step_by(n_elements) {
+                    // println!("loop");
+                    // println!("what is what: {:?}", &self.cells[group_number..group_number+n_elements]);
+                    let range_of_slices= group_number..group_number+n_elements;
+                    let A_row_base = self.cells[range_of_slices.clone()].as_mut_ptr();
+                    // println!("load_base_1");
+                    let B_row_base = substracting_row.cells[range_of_slices].as_ptr();
+                    // println!("load_base_2");
+                    // dbg!(A_row_base);
+                    let A_row = <$T>::_mm_load_avx512(A_row_base);
+                    // println!("mm_load_1");
+                    let B_row = <$T>::_mm_load_avx512(B_row_base);
+                    // println!("mm_load_2");
+        
+                    let result_row = <$T>::_mm_add_avx512(A_row, B_row);
+                    // println!("mm_add");
+        
+                    <$T>::_mm_store_avx512(A_row_base, result_row);
+                    // println!("mm_store");
+        
+                }
+            }
+
+            #[target_feature(enable = "avx512f")]
+            unsafe fn const_multiply_avx512_row(&mut self, factor: $T) {
+                let n_elements = AVX512_type_amount!($T);
+                // println!("self row cells len() = {}, %4 = {}, ==0 = {}", self.cells.len(), self.cells.len() % 4, self.cells.len() % 4 == 0);
+                // println!("substract row cells len() = {}, %4 = {}, ==0 = {}", substracting_row.cells.len(), substracting_row.cells.len() % 4, substracting_row.cells.len() % 4 == 0);
+                // assert!(substracting_row.cells.len() % 4 == 0);
+                // println!("512");
+                let B_row = <$T>::_mm_set_avx512(factor);
+
+                for group_number in (0..self.cells.len()).step_by(n_elements) {
+                    // println!("loop");
+                    // println!("what is what: {:?}", &self.cells[group_number..group_number+n_elements]);
+                    let range_of_slices= group_number..group_number+n_elements;
+                    let A_row_base = self.cells[range_of_slices.clone()].as_mut_ptr();
+                    // println!("load_base_1");
+                    // println!("load_base_2");
+                    // dbg!(A_row_base);
+                    let A_row = <$T>::_mm_load_avx512(A_row_base);
+                    // println!("mm_load_1");
+                    
+                    // println!("mm_load_2");
+        
+                    let result_row = <$T>::_mm_mult_avx512(A_row, &B_row);
+                    // println!("mm_add");
+        
+                    <$T>::_mm_store_avx512(A_row_base, result_row);
+                    // println!("mm_store");
+        
                 }
             }
         }
@@ -579,6 +784,22 @@ impl_SIMDFunctions_per_type!(usize);
 
 impl_SIMDFunctions_per_type!(f32);
 impl_SIMDFunctions_per_type!(f64);
+
+
+lazy_avx512!(i8);
+lazy_avx512!(i16);
+lazy_avx512!(i32);
+lazy_avx512!(i64);
+
+lazy_avx512!(u8);
+lazy_avx512!(u16);
+lazy_avx512!(u32);
+lazy_avx512!(u64);
+
+lazy_avx512!(isize);
+lazy_avx512!(usize);
+
+lazy_avx512!(f32);
 
 // unsafe fn substract_avx2_f64(a_row: &mut Row<f64>, substraction_row: Row<f64>) {
 //     for cell_number in 0..a_row.cells.len() {
