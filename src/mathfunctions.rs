@@ -4,6 +4,195 @@
 
 use crate::*;
 
+#[derive(Debug)]
+pub struct Pos2<T>  {
+    pub x: T,
+    pub y: T
+}
+
+#[derive(Debug)]
+pub struct SpatialVector2<T>  {
+    pub x_direction: T,
+    pub y_direction: T
+}
+
+#[derive(Debug)]
+pub struct SpatialVectorWithBase2<T>  {
+    pub x_base: T,
+    pub y_base: T,
+    pub x_direction: T,
+    pub y_direction: T
+}
+
+pub trait Pos2Functions<T> {
+    fn new(x: T, y: T) -> Self;
+    fn clone(&self) -> Self;
+    fn x(&self) -> T ;
+    fn y(&self) -> T;
+    fn add_vector(self, vector: SpatialVector2<T>) -> Self;
+}
+
+pub trait SpatialVector2Functions<T> {
+    fn new_direction(x_directions: T, y_directions: T) -> Self;
+    fn from_pos2(pos1: &Pos2<T>, pos2: &Pos2<T>) -> Self;
+    fn x_direction(&self) -> T ;
+    fn y_direction(&self) -> T;
+    fn length(&self) -> T;
+    fn normalize(&mut self) -> &mut Self;
+    fn get_normals(&self) -> [Self; 2] where Self: Sized;
+    fn scale(self, scaling_factor: T) -> Self;
+}
+
+pub trait SpatialVectorWithBase2Functions<T> {
+    fn new_with_base(x_base: T, y_base: T, x_direction: T, y_direction: T) -> Self;
+    fn base_pos2_direction_pos2(base_pos: &Pos2<T>, pos1: &Pos2<T>, pos2: &Pos2<T>) -> Self;
+    fn base_at_first_direction_pos2(pos1: &Pos2<T>, pos2: &Pos2<T>) -> Self;
+    fn end_position(&self) -> Pos2<T>;
+}
+
+macro_rules! impl_spatial_types_per_type {
+    ($T: ident) => {
+        impl Pos2Functions<$T> for Pos2<$T> {
+            fn new(x: $T, y: $T) -> Self {
+                Pos2 {x, y}
+            }
+
+            fn clone(&self) -> Self {
+                Self {x: self.x, y: self.y}
+            }
+        
+            fn x(&self) -> $T {
+                self.x
+            }
+        
+            fn y(&self) -> $T {
+                self.y
+            }
+
+            fn add_vector(mut self, vector: SpatialVector2<$T>) -> Self {
+                self.x = self.x + vector.x_direction;
+                self.y = self.y + vector.y_direction;
+                self
+            }
+        }
+
+        impl SpatialVector2Functions<$T> for SpatialVectorWithBase2<$T> {
+            fn new_direction(x_direction: $T, y_direction: $T) -> Self {
+                Self {x_base: 0 as $T, y_base: 0 as $T, x_direction, y_direction}
+            }
+
+            fn from_pos2(pos1: &Pos2<$T>, pos2: &Pos2<$T>) -> Self {
+                let x_direction = pos2.x - pos1.x;
+                let y_direction = pos2.y - pos1.x;
+                Self {x_base: 0 as $T, y_base: 0 as $T, x_direction, y_direction}
+            }
+        
+            fn x_direction(&self) -> $T {
+                self.x_direction
+            }
+        
+            fn y_direction(&self) -> $T {
+                self.y_direction
+            }
+
+            fn length(&self) -> $T {
+                ((self.x_direction as f64).powi(2) + (self.y_direction as f64).powi(2) ).sqrt() as $T
+            }
+
+            fn normalize(&mut self) -> &mut Self {
+                let length = self.length();
+                self.x_direction = self.x_direction / length;
+                self.y_direction = self.y_direction / length;
+                self
+            }
+        
+            fn get_normals(&self) -> [Self; 2] {
+                let normal_1 = Self::new_direction(-self.y_direction, self.x_direction);
+                let normal_2 = Self::new_direction(self.y_direction, -self.x_direction);
+                [normal_1, normal_2]
+            }
+
+            fn scale(mut self, scaling_factor: $T) -> Self {
+                self.x_direction = self.x_direction * scaling_factor;
+                self.y_direction = self.y_direction * scaling_factor;
+
+                self
+            }
+        }
+
+        impl SpatialVector2Functions<$T> for SpatialVector2<$T> {
+            fn new_direction(x_direction: $T, y_direction: $T) -> Self {
+                SpatialVector2 {x_direction, y_direction}
+            }
+
+            fn from_pos2(pos1: &Pos2<$T>, pos2: &Pos2<$T>) -> Self {
+                let x_direction = pos2.x - pos1.x;
+                let y_direction = pos2.y - pos1.y;
+                SpatialVector2 {x_direction, y_direction}
+            }
+        
+            fn x_direction(&self) -> $T {
+                self.x_direction
+            }
+        
+            fn y_direction(&self) -> $T {
+                self.y_direction
+            }
+
+            fn length(&self) -> $T {
+                ((self.x_direction as f64).powi(2) + (self.y_direction as f64).powi(2) ).sqrt() as $T
+            }
+
+            fn normalize(&mut self) -> &mut Self {
+                let length = self.length();
+                self.x_direction = self.x_direction / length;
+                self.y_direction = self.y_direction / length;
+                self
+            }
+        
+            fn get_normals(&self) -> [Self; 2] {
+                let normal_1 = Self::new_direction(-self.y_direction, self.x_direction);
+                let normal_2 = Self::new_direction(self.y_direction, -self.x_direction);
+                [normal_1, normal_2]
+            }
+
+            fn scale(mut self, scaling_factor: $T) -> Self {
+                self.x_direction = self.x_direction * scaling_factor;
+                self.y_direction = self.y_direction * scaling_factor;
+
+                self
+            }
+        }
+
+        impl SpatialVectorWithBase2Functions<$T> for SpatialVectorWithBase2<$T> {
+            fn new_with_base(x_base: $T, y_base: $T, x_direction: $T, y_direction: $T) -> Self {
+
+                Self {x_base, y_base, x_direction, y_direction}
+            }
+
+            fn base_pos2_direction_pos2(base_pos: &Pos2<$T>, pos1: &Pos2<$T>, pos2: &Pos2<$T>) -> Self {
+                let vector_part = SpatialVector2::from_pos2(&pos1, &pos2);
+
+                Self {x_base: base_pos.x, y_base: base_pos.y, x_direction: vector_part.x_direction, y_direction: vector_part.y_direction}
+            }
+
+            fn base_at_first_direction_pos2(pos1: &Pos2<$T>, pos2: &Pos2<$T>) -> Self {
+                let vector_part = SpatialVector2::from_pos2(&pos1, &pos2);
+
+                Self {x_base: pos1.x, y_base: pos1.y, x_direction: vector_part.x_direction, y_direction: vector_part.y_direction}
+            }
+
+            fn end_position(&self) -> Pos2<$T> {
+                Pos2::new(self.x_base + self.x_direction, self.y_base + self.y_direction)
+            }
+        }
+
+    };
+}
+
+
+
+
 
 
 pub trait MathFunctions<T:MatrixValues> {
@@ -157,3 +346,15 @@ impl_math_functions_per_type!(usize);
 
 impl_math_functions_per_type!(f32);
 impl_math_functions_per_type!(f64);
+
+
+
+impl_spatial_types_per_type!(i8);
+impl_spatial_types_per_type!(i16);
+impl_spatial_types_per_type!(i32);
+impl_spatial_types_per_type!(i64);
+
+impl_spatial_types_per_type!(isize);
+
+impl_spatial_types_per_type!(f32);
+impl_spatial_types_per_type!(f64);

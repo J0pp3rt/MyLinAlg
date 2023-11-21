@@ -40,6 +40,8 @@ pub mod gpuaccalerators;
 pub use gpuaccalerators::{*};
 pub mod cpuaccalerators;
 pub use cpuaccalerators::{*};
+pub mod plotting;
+pub use plotting::{*};
 
 use core::{f32};
 
@@ -61,3 +63,8 @@ use num::traits::NumOps;
 use num::{Num, NumCast};
 use rand::Rng;
 use rand::distributions::uniform::SampleUniform;
+
+use resvg::{usvg::{self, TreeParsing}};
+use resvg;
+use tiny_skia::{self, Pixmap};
+use plotters::prelude::*;

@@ -655,6 +655,7 @@ macro_rules! impl_SIMDFunctions_per_type {
     ($T: ty) => {
         // todo: change all the load to loadu to prevent segfault
         // cahnge all adds to subs to maintain logic
+        // apparently there are some allignment things you can do with arrays so SIMD likes it a bit more :)
         impl SIMDFunctions<$T> for Row<$T> {
             #[target_feature(enable = "avx2")]
             unsafe fn substract_avx2_row(&mut self, substracting_row: Row<$T>) {
