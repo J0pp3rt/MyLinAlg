@@ -68,3 +68,7 @@ use resvg::{usvg::{self, TreeParsing}};
 use resvg;
 use tiny_skia::{self, Pixmap};
 use plotters::prelude::*;
+
+fn test() {
+    let test: PlotBuilder<f64> = PlotBuilder::new();
+}
