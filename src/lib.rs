@@ -42,7 +42,7 @@ pub mod cpuaccalerators;
 pub use cpuaccalerators::{*};
 pub mod plotting;
 pub use plotting::{*};
-
+use std::ops::Not;
 use core::{f32};
 
 #[cfg(target_arch = "x86_64")]

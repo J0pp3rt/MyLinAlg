@@ -8,9 +8,9 @@ pub struct Matrix<T: MatrixValues> {
     pub rows : Vec<Row<T>>
 }
 
-pub trait MatrixValues: Copy + Display + PartialEq + Num + NumCast + Copy + 'static{
+pub trait MatrixValues: Copy + Display + PartialEq + Num + NumCast + Copy +std::iter::Sum + 'static{
 }
-impl<T> MatrixValues for T where T: Copy + Display + PartialEq + Num + NumCast + Copy + 'static{
+impl<T> MatrixValues for T where T: Copy + Display + PartialEq + Num + NumCast + Copy +std::iter::Sum+ 'static{
 }
 
 // macro_rules! impl_add_matrix { // todo: reintegrate this
@@ -401,13 +401,13 @@ macro_rules! impl_matrix_functions_for_type {
     
         fn substract_internal_row_from_row_by_index(&mut self, row_number_to_substract: usize, from_row_number: usize) {
             let row_to_substract = self[row_number_to_substract].clone();
-            self[from_row_number].substract_row(row_to_substract)
+            self[from_row_number].substract_row(row_to_substract);
         }
     
         fn substract_multiplied_internal_row_from_row_by_index(&mut self, row_number_to_substract_with: usize, factor: $T , from_row_number: usize) {
             let mut mutliplied_row_to_substract = self[row_number_to_substract_with].clone();
             mutliplied_row_to_substract.multiply_all_elements_by(factor);
-            self[from_row_number].substract_row(mutliplied_row_to_substract)
+            self[from_row_number].substract_row(mutliplied_row_to_substract);
         }
     
         fn substract_multiplied_internal_row_from_row_by_index_with_collumn_range(&mut self, row_number_to_substract_with: usize, factor: $T , from_row_number: usize, collumn_range: impl InputTraitRowCol){
@@ -557,7 +557,7 @@ macro_rules! impl_matrix_functions_for_type {
     
         fn divide_all_elements_by(&mut self, factor: $T) {
             for row_number in 0..self.rows.len() {
-                self.rows[row_number].divide_all_elements_by(factor)
+                self.rows[row_number].divide_all_elements_by(factor);
             }
         }
 

@@ -2,6 +2,8 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
+use std::ops::Mul;
+
 use crate::*;
 
 #[derive(Debug)]
@@ -44,15 +46,40 @@ pub trait RowFunctions<T:MatrixValues> {
     fn len(&self) -> usize;
     fn export(self) -> Row<T>;
     fn clone(&self) -> Row<T>;
-    fn divide_all_elements_by(&mut self, value: T);
-    fn multiply_all_elements_by(&mut self, value: T)-> &Self;
-    fn addition_row_with_external_row(&mut self, row_to_add_to_this_one:& Row<T>);
-    fn normalize_all_elements_to_element(&mut self, index: usize);
-    fn normalize_all_elements_to_first(&mut self) ;
-    fn substract_row(&mut self, substraction_row: Row<T>) ;
-    fn substract_all(&mut self, substraction_row: Row<T>);
-    fn replace_values(&mut self, index_range: Range<usize>, values: Vec<T>);
+    fn all_values_equal(&self, value: T) ->bool;
+    fn divide_all_elements_by(&mut self, value: T)-> &mut Self;
+    fn multiply_all_elements_by(&mut self, value: T)-> &mut Self;
+    fn addition_row_with_external_row(&mut self, row_to_add_to_this_one:& Row<T>)-> &mut Self;
+    fn normalize_all_elements_to_element(&mut self, index: usize)-> &mut Self;
+    fn normalize_all_elements_to_first(&mut self) -> &mut Self;
+    fn substract_row(&mut self, substraction_row: Row<T>)-> &mut Self ;
+    fn substract_all(&mut self, substraction_row: Row<T>)-> &mut Self;
+    fn replace_values(&mut self, index_range: Range<usize>, values: Vec<T>)-> &mut Self;
 
+}
+
+impl<T: MatrixValues> Add for Row<T> {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        if (self.cells.len() == rhs.cells.len()).not() {
+            panic!("added rows not equal length!")
+        }
+        let cells = self.cells.iter().zip(rhs.cells.iter()).map(|(lhs, rhs)| *lhs + *rhs).collect();
+        Row {cells}
+    }
+}
+
+impl<T: MatrixValues> Mul for Row<T> {
+    type Output = T;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        if (self.cells.len() == rhs.cells.len()).not() {
+            panic!("multiplied rows not equal length!")
+        }
+
+        self.cells.iter().zip(rhs.cells.iter()).map(|(lhs, rhs)| *lhs * *rhs).sum::<T>()
+    }
 }
 
 macro_rules! impl_row_type {
@@ -94,7 +121,17 @@ macro_rules! impl_row_type {
                 Row { cells}
             }
         
-            fn divide_all_elements_by(&mut self, value: $T) {
+            fn all_values_equal(&self, value: $T) ->bool {
+                let mut no_inequality_found = true;
+                for row_value in self.cells.iter() {
+                    if (*row_value == value).not() {
+                        no_inequality_found = false;
+                    }
+                }
+                no_inequality_found
+            }
+
+            fn divide_all_elements_by(&mut self, value: $T) -> &mut Self {
 
                 if *IS_AVX512 && USE_OPIMIZERS{
                     unsafe {self.const_multiply_avx512_row(1 as $T/value)}
@@ -106,9 +143,11 @@ macro_rules! impl_row_type {
                         // }
                     }
                 }
+
+                self
             }
         
-            fn multiply_all_elements_by(&mut self, value: $T) -> &Self{
+            fn multiply_all_elements_by(&mut self, value: $T) -> &mut Self{
 
                 if *IS_AVX512 && USE_OPIMIZERS{
                     unsafe {self.const_multiply_avx512_row(value)}
@@ -122,25 +161,28 @@ macro_rules! impl_row_type {
                 self
             }
         
-            fn addition_row_with_external_row(&mut self, row_to_add_to_this_one:& Row<$T>) {
+            fn addition_row_with_external_row(&mut self, row_to_add_to_this_one:& Row<$T>) -> &mut Self {
                 for n in 0..self.cells.len() {
                     // if !(self.cells[n] == NumCast::from(0).unwrap() && row_to_add_to_this_one.cells[n] == NumCast::from(0).unwrap()) {
                         self.cells[n] = self.cells[n] + row_to_add_to_this_one[n];
                     // }
                 }
+                self
             }
         
             
         
-            fn normalize_all_elements_to_element(&mut self, index: usize) {
+            fn normalize_all_elements_to_element(&mut self, index: usize) -> &mut Self {
                 self.divide_all_elements_by(self[index]);
+                self
             }
         
-            fn normalize_all_elements_to_first(&mut self) {
+            fn normalize_all_elements_to_first(&mut self) -> &mut Self {
                 self.normalize_all_elements_to_element(0);
+                self
             }
         
-            fn substract_row(&mut self, substraction_row: Row<$T>) {
+            fn substract_row(&mut self, substraction_row: Row<$T>)-> &mut Self {
                 if !(self.cells.len() == substraction_row.cells.len()) {
                     panic!("Error: Length of substracting row is not equal to row length")
                 }
@@ -149,25 +191,28 @@ macro_rules! impl_row_type {
                 } else if *IS_AVX2 && USE_OPIMIZERS{
                     unsafe {self.substract_avx2_row(substraction_row)}
                 } else {
-                    self.substract_all(substraction_row)
+                    self.substract_all(substraction_row);
                 }
+                self
             }
         
         
-            fn substract_all(&mut self, substraction_row: Row<$T>) {
+            fn substract_all(&mut self, substraction_row: Row<$T>)-> &mut Self {
                 for cell_number in 0..self.cells.len() {
                     // if !(self[cell_number] == NumCast::from(0).unwrap() || substraction_row[cell_number] == NumCast::from(0).unwrap()) { // quickly tested on some sparse matrices but seem to really boost performance . In some more filled ones: around 50x improvemnt, ful matrix not tested yet
                     self[cell_number] = self[cell_number] - substraction_row[cell_number];
                     // }
                 }
+                self
             }
         
-            fn replace_values(&mut self, index_range: Range<usize>, values: Vec<$T>) {
+            fn replace_values(&mut self, index_range: Range<usize>, values: Vec<$T>)-> &mut Self {
                 // maybe add a check if not of same size TODO
                 // instead of range use rangebounds apperantly
                 for (val_index, row_index) in index_range.enumerate() {
                     self.cells[row_index] = values[val_index];
                 }
+                self
             }
         }
     }

@@ -4,6 +4,14 @@
 
 use crate::*;
 
+pub fn golden_ratio() -> f64 {
+    (1. + (5. as f64).sqrt()) / 2.
+}
+
+pub fn golden_ratio_conjugate() -> f64 {
+    1. / golden_ratio()
+}
+
 #[derive(Debug)]
 pub struct Pos2<T>  {
     pub x: T,
