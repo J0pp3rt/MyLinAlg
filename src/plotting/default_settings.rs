@@ -45,6 +45,47 @@ impl PlotStyleSettings {
     pub fn new() -> Self {
         Self { ..Default::default()}
     }
+
+}
+
+impl Clone for PlotStyleSettings {
+    fn clone(&self) -> Self {
+        Self { plot_width: self.plot_width.clone()
+            , plot_height: self.plot_height.clone()
+            , line_width: self.line_width.clone()
+            , show_x_mesh: self.show_x_mesh.clone()
+            , show_y_mesh: self.show_y_mesh.clone()
+            , show_z_mesh: self.show_z_mesh.clone()
+            , show_x_grid_minor: self.show_x_grid_minor.clone()
+            , show_y_grid_minor: self.show_y_grid_minor.clone()
+            , show_z_grid_minor: self.show_z_grid_minor.clone()
+            , x_grid_minor_subdevisions: self.x_grid_minor_subdevisions.clone()
+            , y_grid_minor_subdevisions: self.y_grid_minor_subdevisions.clone()
+            , z_grid_minor_subdevisions: self.z_grid_minor_subdevisions.clone()
+            , x_grid_major_subdevisions: self.x_grid_major_subdevisions.clone()
+            , y_grid_major_subdevisions: self.y_grid_major_subdevisions.clone()
+            , z_grid_major_subdevisions: self.z_grid_major_subdevisions.clone()
+            , show_x_grid_major: self.show_x_grid_major.clone()
+            , show_y_grid_major: self.show_y_grid_major.clone()
+            , show_z_grid_major: self.show_z_grid_major.clone()
+            , show_x_axis: self.show_x_axis.clone()
+            , show_y_axis: self.show_y_axis.clone()
+            , show_z_axis: self.show_z_axis.clone()
+            , plot_3d_pitch: self.plot_3d_pitch.clone()
+            , plot_3d_yaw: self.plot_3d_yaw.clone()
+            , plot_3d_scale: self.plot_3d_scale.clone()
+            , outer_figure_margins: self.outer_figure_margins.clone()
+            , marker_fill: self.marker_fill.clone()
+            , marker_style: self.marker_style.clone()
+            , color_map: Box::new(ViridisRGBA {})
+            , line_color: self.line_color.clone()
+            , title: self.title.clone()
+            , plotters_x_label_area_size: self.plotters_x_label_area_size.clone()
+            , plotters_y_label_area_size: self.plotters_y_label_area_size.clone()
+            , plotters_right_y_label_area_size: self.plotters_right_y_label_area_size.clone()
+            , plotters_margin: self.plotters_margin.clone()
+            , plotters_figure_padding: self.plotters_figure_padding.clone() }
+    }
 }
 
 impl Default for PlotStyleSettings {

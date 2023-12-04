@@ -9,8 +9,9 @@ pub trait PlotProcessorPlottersBackendFunctions<T> {
 }
 pub trait PlotProcessorPlottersBackendFunctionsForAllThePlottersBackends<OutputType: plotters::prelude::DrawingBackend> {
     fn process(&self, root: &mut DrawingArea<OutputType, Shift>);
-    fn simple_2d_plot(&self, root: &mut DrawingArea<OutputType, Shift>);
-    fn simple_3d_plot(&self, root: &mut DrawingArea<OutputType, Shift>);
+    fn simple_2d_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool);
+    fn simple_3d_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool);
+    fn heatmap_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool);
 }
 
 macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoying_variants {
@@ -24,10 +25,17 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
 
             match (self.plots.indentify_plot_type() ){
                 SupportedPlotTypes::Lines2d => {
-                    self.simple_2d_plot(root)
+                    self.simple_2d_plot(root, true)
                 },
                 SupportedPlotTypes::Lines3d => {
-                    self.simple_3d_plot(root)
+                    self.simple_3d_plot(root, true)
+                },
+                SupportedPlotTypes::HeatMap => {
+                    self.heatmap_plot(root, true)
+                },
+                SupportedPlotTypes::HeatMapAndLines2d => {
+                    self.heatmap_plot(root, true);
+                    self.simple_2d_plot(root, false)
                 },
                 // _ => {panic!("This plot type is not supported by the PLOTTERS backend")}
             }
@@ -44,7 +52,7 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
             // done
         }
 
-        fn simple_2d_plot(&self, root: &mut DrawingArea<OutputType, Shift>) {
+        fn simple_2d_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool) {
 
             let title_of_figure: String;
             match &self.plots.title.is_empty() {
@@ -159,7 +167,7 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
             }
         }
 
-        fn simple_3d_plot(&self, root: &mut DrawingArea<OutputType, Shift>) {
+        fn simple_3d_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool) {
 
             let title_of_figure: String;
             match &self.plots.title.is_empty() {
@@ -235,6 +243,182 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                     produce_other_3d_plot_settings!(chart, self);
                 },
                 _ => {panic!("Either there is a genuine axis combination missing or something is messed up! :(")}
+            }
+        }
+
+        fn heatmap_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool) {
+
+            let title_of_figure: String;
+            match &self.plots.title.is_empty() {
+                false => {title_of_figure = self.plots.title.clone()}
+                true => {title_of_figure = self.plots.plotting_settings.title.clone()}
+            }
+
+            let range_x_f64 = self.plots.x_range.as_ref().unwrap().start as f64 .. self.plots.x_range.as_ref().unwrap().end as f64;
+            let range_y_f64 = self.plots.y_range.as_ref().unwrap().start as f64 .. self.plots.y_range.as_ref().unwrap().end as f64;
+            let range_y2_f64 = self.plots.y2_range.as_ref().unwrap().start as f64 .. self.plots.y2_range.as_ref().unwrap().end as f64;
+            let range_z_f64 = self.plots.z_range.as_ref().unwrap().start as f64 .. self.plots.z_range.as_ref().unwrap().end as f64;
+
+            // using unwrap 
+            let x_axis_scaling = self.plots.x_axis_scaling.clone().expect("x axis scaling should have been set!");
+            let y_axis_scaling = self.plots.y_axis_scaling.clone().expect("y axis scaling should have been set!");
+            let z_axis_scaling = self.plots.z_axis_scaling.clone().expect("z axis scaling should have been set!");
+
+            let mut chart = ChartBuilder::on(&root);
+            chart
+            .x_label_area_size(self.plots.plotting_settings.plotters_x_label_area_size)
+            .y_label_area_size(self.plots.plotting_settings.plotters_y_label_area_size)
+            .right_y_label_area_size(self.plots.plotting_settings.plotters_right_y_label_area_size)
+            .margin(self.plots.plotting_settings.plotters_margin)
+            .caption(title_of_figure, ("sans-serif", 25.).into_font());
+
+            match (x_axis_scaling, y_axis_scaling) {
+                (PlotAxisScaling::Linear, PlotAxisScaling::Linear) => {
+                    let mut chart = chart
+                        .build_cartesian_2d(range_x_f64.clone(), range_y_f64)
+                        .unwrap()
+                        .set_secondary_coord((range_x_f64).log_scale(), (range_y2_f64));
+
+                    let mut axis = chart.configure_mesh(); // all of this is stolen from "produce_other_2d_plot_settings" maybe be smarter about this!
+
+                    match self.plots.plotting_settings.x_grid_major_subdevisions {
+                        Option::Some(n_lines) => {
+                            axis.x_labels(n_lines);
+                        },
+                        _ => {} // default is to already show major gridlines
+                    }
+            
+                    match self.plots.plotting_settings.y_grid_major_subdevisions {
+                        Option::Some(n_lines) => {
+                            axis.y_labels(n_lines);
+                        },
+                        _ => {} // default is to already show major gridlines
+                    }
+            
+                    match self.plots.plotting_settings.show_x_grid_minor {
+                        true => {
+                            match self.plots.plotting_settings.x_grid_minor_subdevisions {
+                                Option::Some(n_lines) => {
+                                    axis.x_max_light_lines(n_lines);
+                                },
+                                _ => {} // default is to already show minor gridlines
+                            }
+                        },
+                        false => {
+                            axis.x_max_light_lines(0);
+                        }
+                    }
+            
+                    match self.plots.plotting_settings.show_y_grid_minor {
+                        true => {
+                            match self.plots.plotting_settings.y_grid_minor_subdevisions {
+                                Option::Some(n_lines) => {
+                                    axis.y_max_light_lines(n_lines);
+                                },
+                                _ => {} // default is to already show minor gridlines
+                            }
+                        },
+                        false => {
+                            axis.y_max_light_lines(0);
+                        }
+                    }
+            
+                    match self.plots.plotting_settings.show_x_grid_major {
+                        false => {
+                            println!("Disabling major gridlines not supported yet...");
+                        },
+                        true => {}
+                    }
+            
+                    match self.plots.plotting_settings.show_y_grid_major {
+                        false => {
+                            println!("Disabling major gridlines not supported yet...");
+                        },
+                        true => {}
+                    }
+            
+                    match self.plots.plotting_settings.show_x_axis {
+                        false => {
+                            axis.disable_x_axis();
+                        },
+                        _ => {}
+                    }
+            
+                    match self.plots.plotting_settings.show_y_axis {
+                        false => {
+                            axis.disable_y_axis();
+                        },
+                        _ => {}
+                    }
+            
+                    match self.plots.plotting_settings.show_x_mesh {
+                        false => {
+                            axis.disable_x_mesh();
+                        },
+                        _ => {}
+                    }
+            
+                    match self.plots.plotting_settings.show_y_mesh {
+                        false => {
+                            axis.disable_y_mesh();
+                        },
+                        _ => {}
+                    }
+            
+                    axis
+                        .x_desc(self.plots.x_label.clone())
+                        .y_desc(self.plots.y_label.clone())
+                        .draw().unwrap(); // do some more work on this
+
+                    match self.plots.y2_axis_scaling.as_ref().unwrap() {
+                        PlotAxisScaling::NoAxis => {},
+                        _ => {
+                            // process the settings for the secondary axis, maybe this can be made nicer
+                            let secondary_axis_label = self.plots.y2_label.clone();
+            
+                            chart
+                                .configure_secondary_axes()
+                                .y_desc(secondary_axis_label)
+                                .draw().unwrap();
+                        }
+                    }
+
+                    let n_points_x = self.plots.surface_3d.as_ref().unwrap().x_values.len();
+                    let n_points_y = self.plots.surface_3d.as_ref().unwrap().y_values.len();
+
+                    let x_low = self.plots.x_range.as_ref().unwrap().start as f64;
+                    let x_high = self.plots.x_range.as_ref().unwrap().end as f64;
+
+                    let dx_per_node = (x_high - x_low) / (n_points_x as f64+ 1.);
+
+                    let y_low = self.plots.y_range.as_ref().unwrap().start as f64;
+                    let y_high = self.plots.y_range.as_ref().unwrap().end as f64;
+
+                    let dy_per_node = (y_high - y_low) / (n_points_y as f64+ 1.);
+
+                    let z_low = self.plots.z_range.as_ref().unwrap().start;
+                    let z_high = self.plots.z_range.as_ref().unwrap().end;
+
+                    chart.draw_series(
+                        self.plots.surface_3d.as_ref().unwrap().x_values.iter().enumerate().flat_map( |(x_index, x)|{
+                            self.plots.surface_3d.as_ref().unwrap().y_values.iter().enumerate().map(move |(y_index, y)|{
+                                Rectangle::new(
+                                    [(dx_per_node*(x_index as f64)+x_low, dy_per_node*(y_index as f64)+y_low),(dx_per_node*(x_index as f64 + 1.)+x_low, dy_per_node*(y_index as f64 +1.)+y_low)],
+                                    ShapeStyle {
+                                        color: self.plots.plotting_settings.color_map.get_color((((self.plots.surface_3d.as_ref().unwrap().z_values[x_index][y_index] - z_low)/ (z_high - z_low)) as f32).powf(1./3.)),
+                                        filled: true,
+                                        stroke_width: 0
+                                    }
+                                )
+                            })
+                        })
+                    ).unwrap();
+
+                    // todo!(); // this one took 10 minutes to find
+                },
+                _ => {
+                    panic!("Only linear plot axis are supported in heat maps!")
+                },
             }
         }
     }

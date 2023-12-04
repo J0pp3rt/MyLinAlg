@@ -18,13 +18,17 @@ pub struct Pos2<T>  {
     pub y: T
 }
 
-#[derive(Debug)]
+pub struct PosNDof<T>  {
+    pub x: Vec<T>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SpatialVector2<T>  {
     pub x_direction: T,
     pub y_direction: T
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SpatialVectorWithBase2<T>  {
     pub x_base: T,
     pub y_base: T,
@@ -32,12 +36,35 @@ pub struct SpatialVectorWithBase2<T>  {
     pub y_direction: T
 }
 
+#[derive(Clone)]
+pub struct SpatialVectorNDof<T> {
+    pub vector: Vec<T>,
+}
+
+#[derive(Clone)]
+pub struct SpatialVectorWithBasePointNDof<T> {
+    pub point: Vec<T>,
+    pub vector: Vec<T>
+}
+
+// Impl
+
 pub trait Pos2Functions<T> {
     fn new(x: T, y: T) -> Self;
     fn clone(&self) -> Self;
     fn x(&self) -> T ;
     fn y(&self) -> T;
-    fn add_vector(self, vector: SpatialVector2<T>) -> Self;
+    fn add_vector(&mut self, vector: SpatialVector2<T>) -> &mut Self;
+}
+
+pub trait PosNDofFunctions<T> {
+    fn new(x: Vec<T>) -> Self;
+    fn clone(&self) -> Self;
+    fn x(&self)  -> Vec<T>;
+    fn x_ndof(&self, dof: usize) -> T ;
+    fn n_dof(&self) -> usize;
+    fn add_vector(&mut self, vector: SpatialVectorNDof<T>) -> &mut Self;
+    fn add_vector_vec(&mut self, vector: Vec<T>) -> &mut Self;
 }
 
 pub trait SpatialVector2Functions<T> {
@@ -48,7 +75,7 @@ pub trait SpatialVector2Functions<T> {
     fn length(&self) -> T;
     fn normalize(&mut self) -> &mut Self;
     fn get_normals(&self) -> [Self; 2] where Self: Sized;
-    fn scale(self, scaling_factor: T) -> Self;
+    fn scale(&mut self, scaling_factor: T) -> &mut Self;
 }
 
 pub trait SpatialVectorWithBase2Functions<T> {
@@ -56,6 +83,33 @@ pub trait SpatialVectorWithBase2Functions<T> {
     fn base_pos2_direction_pos2(base_pos: &Pos2<T>, pos1: &Pos2<T>, pos2: &Pos2<T>) -> Self;
     fn base_at_first_direction_pos2(pos1: &Pos2<T>, pos2: &Pos2<T>) -> Self;
     fn end_position(&self) -> Pos2<T>;
+}
+
+pub trait SpatialVectorNdofFunctions<T> {
+    fn new_from_direction(direction_per_dof: Vec<T>) -> Self;
+    fn from_difference(posndof_1: &PosNDof<T>, posndof_2: &PosNDof<T>) -> Self;
+    fn volatile(&self) -> Self;
+    fn x_i_direction(&self, index: usize) -> T;
+    fn set_vector_i_value(&mut self, index: usize, value: T) -> &mut Self;
+    fn set_vector_values(&mut self, values: Vec<T>) -> &mut Self;
+    fn length(&self) -> T;
+    fn normalize(&mut self) -> &mut Self;
+    // fn get_normals(&self) -> [Self; 2] where Self: Sized;
+    fn scale(&mut self, scaling_factor: T) -> &mut Self;
+    fn scale_to_length(&mut self, new_length: T) -> &mut Self;
+    fn flip_direction(&mut self) -> &mut Self;
+    fn n_dof(&self) -> usize;
+}
+
+pub trait SpatialVectorWithBaseNDofFunctions<T> {
+    fn new_with_base(base_point: &Vec<T>, directions: &Vec<T>) -> Self;
+    fn base_direction_from_difference(base_point: &PosNDof<T>, pos1: &PosNDof<T>, pos2: &PosNDof<T>) -> Self;
+    fn base_at_first_direction_from_difference(pos1: &PosNDof<T>, pos2: &PosNDof<T>) -> Self;
+    fn base_point(&self) -> PosNDof<T>;
+    fn base_point_vec(&self) -> Vec<T>;
+    fn end_position(&self) -> PosNDof<T>;
+    fn end_position_vec(&self) -> Vec<T>;
+    fn move_base_to_end_position(&mut self) -> &mut Self;
 }
 
 macro_rules! impl_spatial_types_per_type {
@@ -77,7 +131,7 @@ macro_rules! impl_spatial_types_per_type {
                 self.y
             }
 
-            fn add_vector(mut self, vector: SpatialVector2<$T>) -> Self {
+            fn add_vector(&mut self, vector: SpatialVector2<$T>) -> &mut Self {
                 self.x = self.x + vector.x_direction;
                 self.y = self.y + vector.y_direction;
                 self
@@ -120,7 +174,7 @@ macro_rules! impl_spatial_types_per_type {
                 [normal_1, normal_2]
             }
 
-            fn scale(mut self, scaling_factor: $T) -> Self {
+            fn scale(&mut self, scaling_factor: $T) -> &mut Self {
                 self.x_direction = self.x_direction * scaling_factor;
                 self.y_direction = self.y_direction * scaling_factor;
 
@@ -164,7 +218,7 @@ macro_rules! impl_spatial_types_per_type {
                 [normal_1, normal_2]
             }
 
-            fn scale(mut self, scaling_factor: $T) -> Self {
+            fn scale(&mut self, scaling_factor: $T) -> &mut Self {
                 self.x_direction = self.x_direction * scaling_factor;
                 self.y_direction = self.y_direction * scaling_factor;
 
@@ -192,6 +246,238 @@ macro_rules! impl_spatial_types_per_type {
 
             fn end_position(&self) -> Pos2<$T> {
                 Pos2::new(self.x_base + self.x_direction, self.y_base + self.y_direction)
+            }
+        }
+
+        impl PosNDofFunctions<$T> for PosNDof<$T> {
+            fn new(x: Vec<$T>) -> Self {
+                PosNDof {x}
+            }
+
+            fn clone(&self) -> Self {
+                Self {x: self.x.clone()}
+            }
+        
+            fn x(&self) -> Vec<$T> {
+                self.x.clone()
+            }
+        
+            fn x_ndof(&self, dof: usize) -> $T {
+                self.x[dof]
+            }
+
+            fn n_dof(&self) -> usize {
+                self.x.len()
+            }
+
+            fn add_vector(&mut self, vector: SpatialVectorNDof<$T>) -> &mut Self {
+                self.add_vector_vec(vector.vector)
+            }
+
+            fn add_vector_vec(&mut self, vector: Vec<$T>) -> &mut Self {
+                if (self.x.len() == vector.len()).not() {
+                    panic!("Added vectors do not have equal number of DOF's!")
+                }
+
+                self.x = self.x.iter().zip(vector.iter()).map(|(point_xi, vector_xi)| point_xi + vector_xi).collect();
+                self
+            }
+        }
+
+        impl SpatialVectorNdofFunctions<$T> for SpatialVectorNDof<$T> {
+            fn new_from_direction(direction_per_dof: Vec<$T>) -> Self {
+                SpatialVectorNDof {vector: direction_per_dof}
+            }
+
+            fn from_difference(posndof_1: &PosNDof<$T>, posndof_2: &PosNDof<$T>) -> Self {
+                if (posndof_1.x.len() == posndof_1.x.len()).not() {
+                    panic!("Differentiated points do not have equal number of DOF's!")
+                }
+                let directions = posndof_1.x.iter().zip(posndof_2.x.iter()).map(|(point_1_x, point_2_x)| point_2_x - point_1_x).collect();
+                SpatialVectorNDof {vector: directions}
+            }
+
+            fn volatile(&self) -> Self {
+                self.clone()
+            }
+        
+            fn x_i_direction(&self, index: usize) -> $T {
+                self.vector[index]
+            }
+
+            fn length(&self) -> $T {
+                self.vector.iter().map(|x| (*x as f64).powi(2)).sum::<f64>().sqrt() as $T
+            }
+
+            fn normalize(&mut self) -> &mut Self {
+                let length = self.length();
+                self.vector = self.vector.iter().map(|x| x / length).collect();
+                self
+            }
+
+            fn set_vector_values(&mut self, values: Vec<$T>) -> &mut Self {
+                self.vector = values;
+
+                self
+            }
+
+            fn set_vector_i_value(&mut self, index: usize, value: $T) -> &mut Self {
+                self.vector[index] = value;
+
+                self
+            }
+        
+            // fn get_normals(&self) -> [Self; 2] {
+            //     let normal_1 = Self::new_direction(-self.y_direction, self.x_direction);
+            //     let normal_2 = Self::new_direction(self.y_direction, -self.x_direction);
+            //     [normal_1, normal_2]
+            // }
+
+            fn scale(&mut self, scaling_factor: $T) -> &mut Self {
+                self.vector = self.vector.iter().map(|x| x * scaling_factor).collect();
+                self
+            }
+
+            fn scale_to_length(&mut self, new_length: $T) -> &mut Self {
+                let current_length = self.length();
+                self.vector = self.vector.iter().map(|x| x / current_length * new_length).collect();
+                
+                self
+            }
+
+            fn flip_direction(&mut self) -> &mut Self {
+                self.vector = self.vector.iter().map(|x| -x).collect();
+                
+                self
+            }
+
+            fn n_dof(&self) -> usize {
+                self.vector.len()
+            }
+        }
+
+        impl SpatialVectorNdofFunctions<$T> for SpatialVectorWithBasePointNDof<$T> {
+            fn new_from_direction(direction_per_dof: Vec<$T>) -> Self {
+                let n_dof = direction_per_dof.len();
+                let point = vec![0 as $T; n_dof];
+                Self {point, vector: direction_per_dof}
+            }
+
+            fn from_difference(posndof_1: &PosNDof<$T>, posndof_2: &PosNDof<$T>) -> Self {
+                if (posndof_1.x.len() == posndof_1.x.len()).not() {
+                    panic!("Differentiated points do not have equal number of DOF's!")
+                }
+                let directions = posndof_1.x.iter().zip(posndof_2.x.iter()).map(|(point_1_x, point_2_x)| point_2_x - point_1_x).collect();
+                let n_dof = posndof_1.x.len();
+                let point = vec![0 as $T; n_dof];
+                Self {point, vector: directions}
+            }
+
+            fn volatile(&self) -> Self {
+                self.clone()
+            }
+        
+            fn x_i_direction(&self, index: usize) -> $T {
+                self.vector[index]
+            }
+
+            fn length(&self) -> $T {
+                self.vector.iter().map(|x| (*x as f64).powi(2)).sum::<f64>().sqrt() as $T
+            }
+
+            fn normalize(&mut self) -> &mut Self {
+                let length = self.length();
+                self.vector = self.vector.iter().map(|x| x / length).collect();
+                self
+            }
+        
+            fn set_vector_values(&mut self, values: Vec<$T>) -> &mut Self {
+                self.vector = values;
+
+                self
+            }
+
+            fn set_vector_i_value(&mut self, index: usize, value: $T) -> &mut Self {
+                self.vector[index] = value;
+
+                self
+            }
+
+            // fn get_normals(&self) -> [Self; 2] {
+            //     let normal_1 = Self::new_direction(-self.y_direction, self.x_direction);
+            //     let normal_2 = Self::new_direction(self.y_direction, -self.x_direction);
+            //     [normal_1, normal_2]
+            // }
+
+            fn scale(&mut self, scaling_factor: $T) -> &mut Self {
+                self.vector = self.vector.iter().map(|x| x * scaling_factor).collect();
+                self
+            }
+
+            fn scale_to_length(&mut self, new_length: $T) -> &mut Self {
+                let current_length = self.length();
+                self.vector = self.vector.iter().map(|x| x / current_length * new_length).collect();
+                self
+            }
+
+            fn flip_direction(&mut self) -> &mut Self {
+                self.vector = self.vector.iter().map(|x| -x).collect();
+                
+                self
+            }
+
+            fn n_dof(&self) -> usize {
+                self.vector.len()
+            }
+        }
+
+        impl SpatialVectorWithBaseNDofFunctions<$T> for SpatialVectorWithBasePointNDof<$T> {
+            fn new_with_base(base_point: &Vec<$T>, directions: &Vec<$T>) -> Self {
+
+                Self {point: base_point.clone(), vector: directions.clone()}
+            }
+
+            fn base_direction_from_difference(base_pos: &PosNDof<$T>, pos1: &PosNDof<$T>, pos2: &PosNDof<$T>) -> Self {
+                if (pos1.x.len() == pos2.x.len() && base_pos.x.len() == pos1.x.len()).not() {
+                    panic!("Differentiated points do not have equal number of DOF's!")
+                }
+                let directions = pos1.x.iter().zip(pos2.x.iter()).map(|(point_1_x, point_2_x)| point_2_x - point_1_x).collect();
+                SpatialVectorWithBasePointNDof {point: base_pos.x.clone(), vector: directions}
+            }
+
+            fn base_at_first_direction_from_difference(pos1: &PosNDof<$T>, pos2: &PosNDof<$T>) -> Self {
+                let vector_part = SpatialVectorNDof::from_difference(&pos1, &pos2);
+
+                Self {point: pos1.x.clone(), vector: vector_part.vector}
+            }
+
+            fn base_point(&self) -> PosNDof<$T> {
+                PosNDof::new(self.point.clone())
+            }
+
+            fn base_point_vec(&self) -> Vec<$T> {
+                self.point.clone()
+            }
+
+            fn end_position(&self) -> PosNDof<$T> {
+                let mut point = PosNDof::new(self.point.clone());
+                point.add_vector_vec(self.vector.clone());
+
+                point
+            }
+
+            fn end_position_vec(&self) -> Vec<$T> {
+                let mut point = PosNDof::new(self.point.clone());
+                point.add_vector_vec(self.vector.clone());
+
+                point.x
+            }
+
+            fn move_base_to_end_position(&mut self) -> &mut Self {
+                let end_position = self.end_position_vec();
+                self.point = end_position;
+
+                self
             }
         }
 

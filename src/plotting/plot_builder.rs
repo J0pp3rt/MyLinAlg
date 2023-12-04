@@ -1,9 +1,11 @@
 use crate::plotting::{*};
 
 
+#[derive(Clone)]
 pub struct PlotBuilder<T> {
     pub lines_2d: Option<Vec<Line2d<T>>>,
     pub lines_3d: Option<Vec<Line3d<T>>>,
+    pub surface_3d: Option<Surface3d<T>>,
     pub plot_type: Option<SupportedPlotTypes>,
     pub plot_width: Option<u32>,
     pub plot_height: Option<u32>,
@@ -23,9 +25,12 @@ pub struct PlotBuilder<T> {
     pub plotting_settings: PlotStyleSettings,
 }
 
+#[derive(Clone)]
 pub enum SupportedPlotTypes {
     Lines2d,
-    Lines3d
+    Lines3d,
+    HeatMap,
+    HeatMapAndLines2d,
 }
 
 pub trait PlotBuilderFunctions<T> {
@@ -55,6 +60,8 @@ pub trait PlotBuilderFunctions<T> {
     fn guarantee_3d_lines_initialized(&mut self) -> &mut Self;
     fn add_3d_line(&mut self, line_3d: &Line3d<T>) -> &mut Self;
     fn add_simple_3d_line(&mut self, x_data: &Vec<T>, y_data: &Vec<T>, z_data: &Vec<T>) -> &mut Self;
+    fn add_surface_3d(&mut self, surface_3d: Surface3d<T>) -> &mut Self;
+    fn add_surface_plot_xyz(&mut self, x_data: &Vec<T>, y_data: &Vec<T>, z_data: &Vec<Vec<T>>) -> &mut Self;
     fn to_plot_processor_unitialized(self) -> PlotProcessor<T, NoPlotBackend>;
     fn to_plotters_processor(self) -> PlotProcessor<T, PlottersBackend>;
     fn to_plotpy_processor(self) -> PlotProcessor<T, PlotPyBackend>;
@@ -68,6 +75,7 @@ macro_rules! impl_combined_plots_functions_per_type {
                 Self {
                     lines_2d: Option::None,
                     lines_3d: Option::None,
+                    surface_3d: Option::None,
                     plot_type: Option::None,
                     plot_width: Option::None,
                     plot_height: Option::None,
@@ -228,6 +236,18 @@ macro_rules! impl_combined_plots_functions_per_type {
                 self
             }
 
+            fn add_surface_3d(&mut self, surface_3d: Surface3d<$T>) -> &mut Self {
+                self.surface_3d = Option::Some(surface_3d);
+
+                self
+            }
+
+            fn add_surface_plot_xyz(&mut self, x_data: &Vec<$T>, y_data: &Vec<$T>, z_data: &Vec<Vec<$T>>) -> &mut Self {
+                let surface_plot = Surface3d::new(x_data, y_data, z_data);
+                self.add_surface_3d(surface_plot);
+                self
+            }
+
             fn to_plot_processor_unitialized(mut self) -> PlotProcessor<$T, NoPlotBackend> {
                 self.deduce_ranges_and_axis_types();
                 PlotProcessor::new_unitialized(self)
@@ -299,7 +319,8 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                         for x_value in &line_2d.x_values {
                             if *x_value < x_min {
                                 x_min = *x_value
-                            } else if *x_value > x_max {
+                            }
+                            if *x_value > x_max {
                                 x_max = *x_value
                             }
                         }
@@ -309,7 +330,8 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                             for y_value in &line_2d.y_values {
                                 if *y_value < y2_min {
                                     y2_min = *y_value
-                                } else if *y_value > y2_max {
+                                }
+                                if *y_value > y2_max {
                                     y2_max = *y_value
                                 }
                             }
@@ -318,7 +340,8 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                             for y_value in &line_2d.y_values {
                                 if *y_value < y_min {
                                     y_min = *y_value
-                                } else if *y_value > y_max {
+                                }
+                                if *y_value > y_max {
                                     y_max = *y_value
                                 }
                             }
@@ -331,7 +354,8 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                         for x_value in &line_3d.x_values {
                             if *x_value < x_min {
                                 x_min = *x_value
-                            } else if *x_value > x_max {
+                            }
+                            if *x_value > x_max {
                                 x_max = *x_value
                             }
                         }
@@ -339,7 +363,8 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                         for y_value in &line_3d.y_values {
                             if *y_value < y_min {
                                 y_min = *y_value
-                            } else if *y_value > y_max {
+                            }
+                            if *y_value > y_max {
                                 y_max = *y_value
                             }
                         }
@@ -347,16 +372,51 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                         for z_value in &line_3d.z_values {
                             if *z_value < z_min {
                                 z_min = *z_value
-                            } else if *z_value > z_max {
+                            }
+                            if *z_value > z_max {
                                 z_max = *z_value
                             }
                         }
 
                     }
-                }  else {// include deduce ranges for all new types of plots that can be added.
-                    // if things can be found on the z axis also note that
+                } 
+                if let Option::Some(surface_3d) = &self.surface_3d { 
+                    found_any_on_z = true;
+                        for x_value in &surface_3d.x_values {
+                            if *x_value < x_min {
+                                x_min = *x_value
+                            }
+                            if *x_value > x_max {
+                                x_max = *x_value
+                            }
+                        }
 
-                }
+                        for y_value in &surface_3d.y_values {
+                            if *y_value < y_min {
+                                y_min = *y_value
+                            }
+                            if *y_value > y_max {
+                                y_max = *y_value
+                            }
+                        }
+
+                        for z_value_row in &surface_3d.z_values {
+                            for z_value in z_value_row {
+                                if *z_value < z_min {
+                                    z_min = *z_value
+                                }
+                                if *z_value > z_max {
+                                    z_max = *z_value
+                                }
+                            }
+                        }
+                } 
+
+                
+                // else {// include deduce ranges for all new types of plots that can be added.
+                //     // if things can be found on the z axis also note that
+
+                // }
 
                 // store found values only if user did not set limits yet!
                 if let Option::None = self.x_range {
@@ -418,6 +478,33 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                                 SupportedPlotTypes::Lines3d
                             }
                         },
+                        SupportedPlotTypes::HeatMap => {
+                            if let Option::None = self.surface_3d {
+                                panic!("No 3d lines initialized, can not make 3d line plot")
+                            } else {
+                                SupportedPlotTypes::HeatMap
+                            }
+                        },
+                        SupportedPlotTypes::HeatMapAndLines2d => {
+                            let surface3d_detected: bool;
+                            let lines2d_detected: bool;
+                            if let Option::None = self.surface_3d {
+                                surface3d_detected = false;
+                            } else {
+                                surface3d_detected = true;
+                            }
+                            if let Option::None = self.lines_2d {
+                                lines2d_detected = false;
+                            } else {
+                                lines2d_detected = true;
+                            }
+
+                            if (surface3d_detected || lines2d_detected).not() {
+                                panic!("No 3d lines initialized, can not make 3d line plot")
+                            } else {
+                                SupportedPlotTypes::HeatMapAndLines2d
+                            }
+                        }
                         }
                 } else {
 
@@ -436,28 +523,43 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                         plot_3d_line_included = false;
                     }
 
+                    let plot_surface_3d_included: bool;
+                    if let Some(_) = self.surface_3d {
+                        plot_surface_3d_included = true;
+                    } else {
+                        plot_surface_3d_included = false;
+                    }
+
                     // match the supported combinations
-                    match (plot_2d_line_included, plot_3d_line_included) {
-                        (true, false) => {                       
+                    match (plot_2d_line_included, plot_3d_line_included, plot_surface_3d_included) {
+                        (true, false, false) => {                       
                             SupportedPlotTypes::Lines2d
                         },
-                        (false, true) => {
+                        (false, true, false) => {
                             SupportedPlotTypes::Lines3d
                         }
-                        (true, true) => { // AKA all other options, meant to be _ => { but left as example
+                        (false, false, true) => {
+                            SupportedPlotTypes::HeatMap
+                        }
+                        (true, false, true) => {
+                            SupportedPlotTypes::HeatMapAndLines2d
+                        }
+                        (true, true, false) => { // AKA all other options, meant to be _ => { but left as example
                             println!("Found combination of plots: plot_2d_line = {}, plot_3d_line = {}", plot_2d_line_included, plot_3d_line_included);
                             panic!("This combination of plots is not supported!");
                         }, 
-                        (false, false) => { // AKA all other options, meant to be _ => { but left as example
+                        (false, false, false) => { // AKA all other options, meant to be _ => { but left as example
                             println!("Found combination of plots: plot_2d_line = {}, plot_3d_line = {}", plot_2d_line_included, plot_3d_line_included);
                             panic!("This combination of plots is not supported!");
                         }, 
+                        _ => {panic!("This combination of plots is not supported!")}
                     }
                 }
             }
         }
     };
 }
+
 
 impl_combined_plots_functions_per_type!(i8);
 impl_combined_plots_functions_per_type!(i16);
