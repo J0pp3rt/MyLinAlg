@@ -3,6 +3,60 @@
 #![allow(unused_imports)]
 
 use crate::*;
+use std::ops::{Mul, Sub};
+
+pub struct Polynomial<T> {
+    coefficients: Vec<T> // ascending order: c_0 + c_1*x + c_2*x^2
+}
+
+pub trait PolynomialFunctions<T> {
+    fn new(coefficients: Vec<T>) -> Self;
+    fn clone(&self) -> Self;
+    fn volatile(&self) -> Self;
+    fn n_dof(&self) -> usize;
+    fn take_derivative(&mut self) -> &mut Self;
+    fn value_at_x(&self, x: T) -> T;
+}
+
+macro_rules! impl_polynomial_per_type {
+    ($T: ident) => {
+        impl PolynomialFunctions<$T> for Polynomial<$T> {
+            fn new(coefficients: Vec<$T>) -> Self {
+                Self {
+                    coefficients
+                }
+            }
+
+            fn clone(&self) -> Self {
+                Self {
+                    coefficients: self.coefficients.clone()
+                }
+            }
+
+            fn volatile(&self) -> Self {
+                self.clone()
+            }
+
+            fn n_dof(&self) -> usize {
+                self.coefficients.len()
+            }
+
+            fn take_derivative(&mut self) -> &mut Self {
+                self.coefficients = self.coefficients.iter().enumerate().map(|(i, c_i)| c_i * (i as $T)).collect();
+                self.coefficients.remove(0);
+                self.coefficients.push(0 as $T);
+                self
+            }
+
+            fn value_at_x(&self, x: $T) -> $T {
+                let x = x as f64;
+            
+                self.coefficients.iter().enumerate().map(|(i, c_i)| {x.powi(i as i32) * (*c_i as f64)})
+                    .sum::<f64>() as $T
+            }
+        }
+    }
+}
 
 pub fn golden_ratio() -> f64 {
     (1. + (5. as f64).sqrt()) / 2.
@@ -86,12 +140,14 @@ pub trait SpatialVectorWithBase2Functions<T> {
 }
 
 pub trait SpatialVectorNdofFunctions<T> {
+    fn export(self) -> Self;
     fn new_from_direction(direction_per_dof: Vec<T>) -> Self;
     fn from_difference(posndof_1: &PosNDof<T>, posndof_2: &PosNDof<T>) -> Self;
     fn volatile(&self) -> Self;
     fn x_i_direction(&self, index: usize) -> T;
     fn set_vector_i_value(&mut self, index: usize, value: T) -> &mut Self;
     fn set_vector_values(&mut self, values: Vec<T>) -> &mut Self;
+    fn vector(&self) -> SpatialVectorNDof<T>;
     fn length(&self) -> T;
     fn normalize(&mut self) -> &mut Self;
     // fn get_normals(&self) -> [Self; 2] where Self: Sized;
@@ -110,6 +166,35 @@ pub trait SpatialVectorWithBaseNDofFunctions<T> {
     fn end_position(&self) -> PosNDof<T>;
     fn end_position_vec(&self) -> Vec<T>;
     fn move_base_to_end_position(&mut self) -> &mut Self;
+}
+
+impl<T: std::ops::Mul + std::ops::Add + std::iter::Sum<<T as std::ops::Mul>::Output> + Copy> Mul for SpatialVectorNDof<T> {
+    type Output = T;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        self.vector.iter().zip(rhs.vector.iter()).map(|(x_l, x_r)| *x_l * *x_r).sum()
+    }
+}
+
+impl<T: std::ops::Add + Copy> Add for SpatialVectorNDof<T>  
+where Vec<T>: FromIterator<<T as Add>::Output>, SpatialVectorNDof<T>: mathfunctions::SpatialVectorNdofFunctions<T>{
+
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let new_vector: Vec<T> = self.vector.iter().zip(rhs.vector.iter()).map(|(x_l, x_r)| *x_l + *x_r).collect();
+        SpatialVectorNdofFunctions::<T>::new_from_direction(new_vector)
+    }
+}
+
+impl<T: std::ops::Sub + Copy> Sub for SpatialVectorNDof<T>
+where Vec<T>: FromIterator<<T as Sub>::Output>, SpatialVectorNDof<T>: mathfunctions::SpatialVectorNdofFunctions<T> {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        let new_vector: Vec<T> = self.vector.iter().zip(rhs.vector.iter()).map(|(x_l, x_r)| *x_l - *x_r).collect();
+        SpatialVectorNdofFunctions::<T>::new_from_direction(new_vector)
+    }
 }
 
 macro_rules! impl_spatial_types_per_type {
@@ -285,6 +370,10 @@ macro_rules! impl_spatial_types_per_type {
         }
 
         impl SpatialVectorNdofFunctions<$T> for SpatialVectorNDof<$T> {
+            fn export(self) -> Self {
+                self
+            }
+
             fn new_from_direction(direction_per_dof: Vec<$T>) -> Self {
                 SpatialVectorNDof {vector: direction_per_dof}
             }
@@ -326,6 +415,10 @@ macro_rules! impl_spatial_types_per_type {
 
                 self
             }
+
+            fn vector(&self) -> SpatialVectorNDof<$T> {
+                self.clone()
+            }
         
             // fn get_normals(&self) -> [Self; 2] {
             //     let normal_1 = Self::new_direction(-self.y_direction, self.x_direction);
@@ -357,6 +450,10 @@ macro_rules! impl_spatial_types_per_type {
         }
 
         impl SpatialVectorNdofFunctions<$T> for SpatialVectorWithBasePointNDof<$T> {
+            fn export(self) -> Self {
+                self
+            }
+
             fn new_from_direction(direction_per_dof: Vec<$T>) -> Self {
                 let n_dof = direction_per_dof.len();
                 let point = vec![0 as $T; n_dof];
@@ -401,6 +498,10 @@ macro_rules! impl_spatial_types_per_type {
                 self.vector[index] = value;
 
                 self
+            }
+
+            fn vector(&self) -> SpatialVectorNDof<$T> {
+                SpatialVectorNDof::new_from_direction(self.vector.clone())
             }
 
             // fn get_normals(&self) -> [Self; 2] {
@@ -652,3 +753,13 @@ impl_spatial_types_per_type!(isize);
 
 impl_spatial_types_per_type!(f32);
 impl_spatial_types_per_type!(f64);
+
+impl_polynomial_per_type!(i8);
+impl_polynomial_per_type!(i16);
+impl_polynomial_per_type!(i32);
+impl_polynomial_per_type!(i64);
+
+impl_polynomial_per_type!(isize);
+
+impl_polynomial_per_type!(f32);
+impl_polynomial_per_type!(f64);

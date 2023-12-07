@@ -15,4 +15,7 @@ pub use plot_builder::{*};
 pub mod plot_processor;
 pub use plot_processor::{*};
 
+pub mod interactive;
+pub use interactive::{*};
+
 use plotters::coord::Shift;

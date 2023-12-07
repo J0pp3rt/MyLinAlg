@@ -250,16 +250,19 @@ macro_rules! impl_combined_plots_functions_per_type {
 
             fn to_plot_processor_unitialized(mut self) -> PlotProcessor<$T, NoPlotBackend> {
                 self.deduce_ranges_and_axis_types();
+                // self.filter_out_of_frame_values();
                 PlotProcessor::new_unitialized(self)
             }
 
             fn to_plotters_processor(mut self) -> PlotProcessor<$T, PlottersBackend> {
                 self.deduce_ranges_and_axis_types();
+                // self.filter_out_of_frame_values();
                 PlotProcessor::new_plotters_backend(self)
             }
 
             fn to_plotpy_processor(mut self) -> PlotProcessor<$T, PlotPyBackend> {
                 self.deduce_ranges_and_axis_types();
+                // self.filter_out_of_frame_values();
                 PlotProcessor::new_plotpy_backend(self)
             }
 
@@ -294,6 +297,7 @@ macro_rules! impl_combined_plots_functions_per_type {
 
 pub trait PlotsPreProcessFunctions<T> {
     fn deduce_ranges_and_axis_types(&mut self) -> &mut Self;
+    fn filter_out_of_frame_values(&mut self) -> &mut Self;
     fn indentify_plot_type(&self) -> SupportedPlotTypes;
 }
 
@@ -460,6 +464,192 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                 self
             }
 
+            fn filter_out_of_frame_values(&mut self) -> &mut Self {
+                let x_range = self.x_range.clone().unwrap();
+                let y_range = self.y_range.clone().unwrap();
+                let y2_range = self.y2_range.clone().unwrap();
+
+                let lines_2d_found: bool;
+                let mut lines: Vec<Line2d<$T>>;
+                match &self.lines_2d {
+                    Option::Some(lines_2d) => {
+                        lines_2d_found = true;
+                        lines = lines_2d.clone()
+                    },
+                    Option::None => {
+                        lines_2d_found = false;
+                        lines = Vec::<Line2d<$T>>::new();
+                    }
+                }
+
+                if lines_2d_found {
+                    for i_l in 0..lines.len() {
+                        let relavant_y_range: Range<$T>;
+                        if lines[i_l].on_secondary_axis {
+                            relavant_y_range = y2_range.clone();
+                        } else {
+                            relavant_y_range = y_range.clone();
+                        }
+
+                        for i_p in 0.. lines[i_l].x_values.len()-1 {
+
+                            let is_in_x_range = x_range.contains(&lines[i_l].x_values[i_p]);
+                            let is_in_y_range = relavant_y_range.contains(&lines[i_l].x_values[i_p]);
+
+                            if !(is_in_x_range && is_in_y_range) {
+                                lines[i_l].x_values[i_p] = $T::INFINITY;
+                                lines[i_l].y_values[i_p] = $T::INFINITY;
+                            }        
+                    
+                        
+                        }
+                    }
+                    self.lines_2d = Option::Some(lines);
+                }
+
+                
+
+
+                // // "find_point_that_intersects_boundry" breaks if the ranges are reversed!
+                // assert!(self.x_range.as_ref().unwrap().end > self.x_range.as_ref().unwrap().start);
+                // assert!(self.y_range.as_ref().unwrap().end > self.y_range.as_ref().unwrap().start);
+
+                // fn check_neighbour_is_in_range(lines: &Vec<Line2d<$T>>, i_l: usize, i_p: usize, x_range: &Range<$T>, y_range: &Range<$T>) -> bool {
+                //     let is_in_x_range = x_range.contains(&lines[i_l].x_values[i_p]);
+                //     let is_in_y_range = y_range.contains(&lines[i_l].x_values[i_p]);
+
+                //     if (is_in_x_range && is_in_y_range) {
+                //         true
+                //     } else {
+                //         false
+                //     }
+                // }
+
+                // fn find_point_that_intersects_boundry(lines: &Vec<Line2d<$T>>, i_l: usize, i_p: usize, i_p_other: usize, x_range: &Range<$T>, y_range: &Range<$T>) -> ($T, $T) {
+                //     // this function breaks if range is reversed
+                //     let x = lines[i_l].x_values[i_p];
+                //     let y = lines[i_l].y_values[i_p];
+                    
+                //     let x_other = lines[i_l].x_values[i_p_other];
+                //     let y_other = lines[i_l].y_values[i_p_other];
+
+                //     let a = (y - y_other) / (x - x_other);
+                //     let b = y - a*x;
+
+                //     let x_intersect_y_upper = (y_range.end - b) / a;
+                //     let x_intersect_y_lower = (y_range.start - b) / a;
+
+                //     let y_intersect_x_left = a*x_range.start + b;
+                //     let y_intersect_x_right = a*x_range.end + b;
+
+                //     if a > 0. {
+                //         if a * x_range.start + b < y_range.start {
+                //             let length_to_intersect_x_right = ( (x - x_range.end).powi(2) + (y - y_intersect_x_right).powi(2) ).sqrt();
+                //             let length_to_intersect_y_low = ( (x - x_intersect_y_lower).powi(2) + (y - y_range.start).powi(2) ).sqrt();
+                //             if length_to_intersect_x_right < length_to_intersect_y_low {
+                //                 (x_range.end, y_intersect_x_right)
+                //             } else {
+                //                 (x_intersect_y_lower, y_range.start)
+                //             }
+                //         } else {
+                //             let length_to_intersect_x_left = ( (x - x_range.start).powi(2) + (y - y_intersect_x_left).powi(2) ).sqrt();
+                //             let length_to_intersect_y_upper = ( (x - x_intersect_y_upper).powi(2) + (y - y_range.end).powi(2) ).sqrt();
+                //             if length_to_intersect_x_left < length_to_intersect_y_upper {
+                //                 (x_range.start, y_intersect_x_left)
+                //             } else {
+                //                 (x_intersect_y_upper, y_range.end)
+                //             }
+                //         }
+                //     } else {
+                //         if a * x_range.start + b < y_range.end {
+                //             let length_to_intersect_x_left = ( (x - x_range.start).powi(2) + (y - y_intersect_x_left).powi(2) ).sqrt();
+                //             let length_to_intersect_y_low = ( (x - x_intersect_y_lower).powi(2) + (y - y_range.start).powi(2) ).sqrt();
+                //             if length_to_intersect_x_left < length_to_intersect_y_low {
+                //                 (x_range.start, y_intersect_x_left)
+                //             } else {
+                //                 (x_intersect_y_lower, y_range.start)
+                //             }
+                //         } else {
+                //             let length_to_intersect_y_upper = ( (x - x_intersect_y_upper).powi(2) + (y - y_range.end).powi(2) ).sqrt();
+                //             let length_to_intersect_x_right = ( (x - x_range.end).powi(2) + (y - y_intersect_x_right).powi(2) ).sqrt();
+                //             if length_to_intersect_y_upper < length_to_intersect_x_right {
+                //                 (x_intersect_y_upper, y_range.end)
+                //             } else {
+                //                 (x_range.end, y_intersect_x_right)
+                //             }
+                //         }
+                //     }
+                // }
+
+                // let x_range = self.x_range.clone().unwrap();
+                // let y_range = self.y_range.clone().unwrap();
+                // let y2_range = self.y2_range.clone().unwrap();
+
+                // let lines_2d_corrected: Option<Vec<Line2d<$T>>>;
+                // match &self.lines_2d {
+                //     Option::Some(lines_2d) => {
+                //         let mut lines = lines_2d.clone();
+                //         for i_l in 0..lines.len() {
+
+
+                //             let relavant_y_range: Range<$T>;
+                //             if lines[i_l].on_secondary_axis {
+                //                 relavant_y_range = y2_range.clone();
+                //             } else {
+                //                 relavant_y_range = y_range.clone();
+                //             }
+
+                //             let mut new_x_values = Vec::<$T>::with_capacity(lines[i_l].x_values.len());
+                //             let mut new_y_values = Vec::<$T>::with_capacity(lines[i_l].x_values.len());
+
+                //             for i_p in 0.. lines[i_l].x_values.len()-1 {
+
+                //                 let is_in_x_range = x_range.contains(&lines[i_l].x_values[i_p]);
+                //                 let is_in_y_range = relavant_y_range.contains(&lines[i_l].x_values[i_p]);
+
+                //                 let self_is_in_range: bool;
+                //                 if is_in_x_range && is_in_y_range {
+                //                     self_is_in_range = true;
+                //                     new_x_values.push(lines[i_l].x_values[i_p]);
+                //                     new_y_values.push(lines[i_l].x_values[i_p]);
+                //                 } else {
+                //                     self_is_in_range = false;
+                //                 }
+
+                //                 let right_neigbour_is_in_range = check_neighbour_is_in_range(&lines, i_l, i_p+1, &x_range, &y_range);
+
+                //                 match (self_is_in_range, right_neigbour_is_in_range) {
+                //                     (true, true) => {}, // will be added normally
+                //                     (true, false) => { // add point on intersect with frame
+                //                         let (x_inter, y_inter) = find_point_that_intersects_boundry(&lines, i_l, i_p, i_p+1, &x_range, &y_range);
+                //                         new_x_values.push(x_inter);
+                //                         new_y_values.push(y_inter);
+                //                     }
+                //                     (false, true) => { // add nan to disconnect points, insert point on edge boundry
+                //                         new_x_values.push($T::NAN);
+                //                         new_y_values.push($T::NAN);
+                //                         let (x_inter, y_inter) = find_point_that_intersects_boundry(&lines, i_l, i_p, i_p+1, &x_range, &y_range);
+                //                         new_x_values.push(x_inter);
+                //                         new_y_values.push(y_inter);
+                //                     }
+                //                     (false, false) => {} // no points need to be added.
+                //                 }
+                                
+                //             }
+
+                //             lines[i_l].x_values = new_x_values;
+                //             lines[i_l].y_values = new_y_values;
+                //         }
+                //         lines_2d_corrected = Option::Some(lines);
+                //     },
+                //     Option::None => {lines_2d_corrected = Option::None}
+                // }
+
+                // self.lines_2d = lines_2d_corrected;
+
+                self
+            }
+
             fn indentify_plot_type(&self) -> SupportedPlotTypes {
 
                 if let Option::Some(prefered_plot_type) = &self.plot_type {
@@ -561,22 +751,11 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
 }
 
 
-impl_combined_plots_functions_per_type!(i8);
-impl_combined_plots_functions_per_type!(i16);
-impl_combined_plots_functions_per_type!(i32);
-impl_combined_plots_functions_per_type!(i64);
 
-impl_combined_plots_functions_per_type!(isize);
 
 impl_combined_plots_functions_per_type!(f32);
 impl_combined_plots_functions_per_type!(f64);
 
-impl_combined_plots_known_range_functions_per_type!(i8);
-impl_combined_plots_known_range_functions_per_type!(i16);
-impl_combined_plots_known_range_functions_per_type!(i32);
-impl_combined_plots_known_range_functions_per_type!(i64);
-
-impl_combined_plots_known_range_functions_per_type!(isize);
 
 impl_combined_plots_known_range_functions_per_type!(f32);
 impl_combined_plots_known_range_functions_per_type!(f64);

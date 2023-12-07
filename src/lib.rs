@@ -45,6 +45,9 @@ pub use plotting::{*};
 use std::ops::Not;
 use core::{f32};
 
+use eframe::egui;
+use std::rc::Rc;
+
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::*;
 

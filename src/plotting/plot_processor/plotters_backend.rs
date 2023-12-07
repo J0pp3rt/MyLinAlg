@@ -4,8 +4,8 @@ pub trait PlotProcessorPlottersBackendFunctions<T> {
 
     fn SVG_to_file(&self, file_path: &str);
     fn SVG_to_mem(&self) -> String;
-    fn SVG_to_RGBA(&self) -> Box<[u8]>;
-
+    fn SVG_to_RGBA(&self) -> Vec<u8>;
+    fn bitmap_to_rgb(&self) -> Vec<u8>;
 }
 pub trait PlotProcessorPlottersBackendFunctionsForAllThePlottersBackends<OutputType: plotters::prelude::DrawingBackend> {
     fn process(&self, root: &mut DrawingArea<OutputType, Shift>);
@@ -325,14 +325,14 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
             
                     match self.plots.plotting_settings.show_x_grid_major {
                         false => {
-                            println!("Disabling major gridlines not supported yet...");
+                            // println!("Disabling major gridlines not supported yet...");
                         },
                         true => {}
                     }
             
                     match self.plots.plotting_settings.show_y_grid_major {
                         false => {
-                            println!("Disabling major gridlines not supported yet...");
+                            // println!("Disabling major gridlines not supported yet...");
                         },
                         true => {}
                     }
@@ -389,12 +389,12 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                     let x_low = self.plots.x_range.as_ref().unwrap().start as f64;
                     let x_high = self.plots.x_range.as_ref().unwrap().end as f64;
 
-                    let dx_per_node = (x_high - x_low) / (n_points_x as f64+ 1.);
+                    let dx_per_node = (x_high - x_low) / (n_points_x as f64);
 
                     let y_low = self.plots.y_range.as_ref().unwrap().start as f64;
                     let y_high = self.plots.y_range.as_ref().unwrap().end as f64;
 
-                    let dy_per_node = (y_high - y_low) / (n_points_y as f64+ 1.);
+                    let dy_per_node = (y_high - y_low) / (n_points_y as f64);
 
                     let z_low = self.plots.z_range.as_ref().unwrap().start;
                     let z_high = self.plots.z_range.as_ref().unwrap().end;
@@ -448,18 +448,44 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type {
                 string_buffer
             }
             
-            fn SVG_to_RGBA(&self) -> Box<[u8]> {
-                // probably this one utilizes SVG_to_mem first
-                todo!()
+            fn SVG_to_RGBA(&self) -> Vec<u8> {
+                // use plotters svg backend to render a svg image
+                // then use usvg to render svg to rgba
+                let start_svg = Instant::now();
+                let svg_string = self.SVG_to_mem();
+                let time_svg = start_svg.elapsed();
+                let parsing_svg = Instant::now();
+                let parsing_options = resvg::usvg::Options::default();
+                let parsed_svg = &usvg::TreeParsing::from_str(&svg_string, &parsing_options).unwrap();
+                let resvg_tree = resvg::Tree::from_usvg(parsed_svg);
+                let time_parsing = parsing_svg.elapsed();
+                let start_render_2 = Instant::now();
+                let mut pixmap = Pixmap::new(self.plots.plot_width.unwrap(), self.plots.plot_height.unwrap()).expect("Error creating pixmap");
+                resvg_tree.render(Default::default(), &mut pixmap.as_mut());
+                let time_render_2 = start_render_2.elapsed();
+
+                println!("time svg: {:?}, time parsing {:?}, time_render2: {:?}", time_svg, time_parsing, time_render_2);
+            
+                pixmap.take()
+            }
+
+            fn bitmap_to_rgb(&self) -> Vec<u8> {
+                let (width, height) = self.plots.get_plot_dimensions(); 
+
+                let mut buffer = vec![0u8; (width*height*3) as usize];
+                {
+                    let mut root = BitMapBackend::with_buffer(&mut buffer, (width, height)).into_drawing_area();
+                    self.process(&mut root);
+                }
+                
+
+                buffer
             }
 
             
         }
     }
 }
-
-
-
 
 macro_rules! produce_other_2d_plot_settings {
     ($chart: expr, $self: expr) => {
@@ -509,14 +535,14 @@ macro_rules! produce_other_2d_plot_settings {
 
         match $self.plots.plotting_settings.show_x_grid_major {
             false => {
-                println!("Disabling major gridlines not supported yet...");
+                // println!("Disabling major gridlines not supported yet...");
             },
             true => {}
         }
 
         match $self.plots.plotting_settings.show_y_grid_major {
             false => {
-                println!("Disabling major gridlines not supported yet...");
+                // println!("Disabling major gridlines not supported yet...");
             },
             true => {}
         }
@@ -708,14 +734,14 @@ macro_rules! produce_other_3d_plot_settings {
 
         match $self.plots.plotting_settings.show_x_grid_major {
             false => {
-                println!("Disabling major gridlines not supported yet...");
+                // println!("Disabling major gridlines not supported yet...");
             },
             true => {}
         }
 
         match $self.plots.plotting_settings.show_y_grid_major {
             false => {
-                println!("Disabling major gridlines not supported yet...");
+                // println!("Disabling major gridlines not supported yet...");
             },
             true => {}
         }
@@ -833,22 +859,12 @@ macro_rules! produce_other_3d_plot_settings {
     }
 }
 
-impl_plot_processor_plotters_backend_functions_per_type!(i8);
-impl_plot_processor_plotters_backend_functions_per_type!(i16);
-impl_plot_processor_plotters_backend_functions_per_type!(i32);
-impl_plot_processor_plotters_backend_functions_per_type!(i64);
 
-impl_plot_processor_plotters_backend_functions_per_type!(isize);
 
 impl_plot_processor_plotters_backend_functions_per_type!(f32);
 impl_plot_processor_plotters_backend_functions_per_type!(f64);
 
-impl_plot_processor_plotters_backend_functions_per_type_with_annoying_variants!(i8);
-impl_plot_processor_plotters_backend_functions_per_type_with_annoying_variants!(i16);
-impl_plot_processor_plotters_backend_functions_per_type_with_annoying_variants!(i32);
-impl_plot_processor_plotters_backend_functions_per_type_with_annoying_variants!(i64);
 
-impl_plot_processor_plotters_backend_functions_per_type_with_annoying_variants!(isize);
 
 impl_plot_processor_plotters_backend_functions_per_type_with_annoying_variants!(f32);
 impl_plot_processor_plotters_backend_functions_per_type_with_annoying_variants!(f64);
