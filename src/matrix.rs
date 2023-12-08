@@ -4,6 +4,10 @@
 
 use crate::*;
 
+use std::ops::Sub;
+use std::ops::Mul;
+
+#[derive(Clone)]
 pub struct Matrix<T: MatrixValues> {
     pub rows : Vec<Row<T>>
 }
@@ -12,6 +16,69 @@ pub trait MatrixValues: Copy + Display + PartialEq + Num + NumCast + Copy +std::
 }
 impl<T> MatrixValues for T where T: Copy + Display + PartialEq + Num + NumCast + Copy +std::iter::Sum+ 'static{
 }
+
+impl<T: MatrixValues + std::ops::AddAssign> Add for Matrix<T> {
+    type Output = Self;
+
+    fn add(mut self, rhs: Self) -> Self::Output {
+        assert!(self.rows.len() == rhs.rows.len(), "Provided matrices for addition do not contain same number of rows");
+
+        for (row_lhs, row_rhs) in self.rows.iter_mut().zip(rhs.rows.iter()) {
+            for (cell_lhs, cell_rhs) in row_lhs.cells.iter_mut().zip(row_rhs.cells.iter()) {
+                *cell_lhs += *cell_rhs
+            }
+        }
+
+        self
+    }
+}
+
+impl<T: MatrixValues + std::ops::Neg> Sub for Matrix<T> {
+    type Output = Matrix<T>;
+
+    fn sub(mut self, rhs: Self) -> Self::Output {
+        assert!(self.rows.len() == rhs.rows.len(), "Provided matrices for substraction do not contain same number of rows");
+
+        for (row_lhs, row_rhs) in self.rows.iter_mut().zip(rhs.rows.iter()) {
+            assert!(row_lhs.cells.len() == row_rhs.cells.len(), "Provided matrices for substraction do not contain same number of collumns");
+            for (cell_lhs, cell_rhs) in row_lhs.cells.iter_mut().zip(row_rhs.cells.iter()) {
+                *cell_lhs = *cell_lhs -(*cell_rhs)
+            }
+        }
+
+        self
+    }
+}
+
+macro_rules! impl_mult_matrix_per_type {
+    ($T:ident) => {
+        impl Mul for Matrix<$T> {
+            type Output = Self;
+
+            fn mul(self, rhs: Self) -> Self::Output {
+                $T::matrix_dot_matrix(&self, &rhs)
+            }
+        }
+    };
+}
+
+impl_mult_matrix_per_type!(f32);
+impl_mult_matrix_per_type!(f64);
+
+// impl<T: MatrixValues> Mul for Matrix<T> {
+//     type Output = Self;
+
+//     fn mul(mut self, rhs: Self) -> Self::Output {
+//         fn row_fot_collumn()
+
+//         // This function will not be optimal: not using optimized functions which are behind type_macros. Implementing mul per type might work?
+//         assert!(self.rows.len() == rhs.rows.len(), "Provided matrices for multiplication do not contain same number of rows");
+
+
+
+//         self
+//     }
+// }
 
 // macro_rules! impl_add_matrix { // todo: reintegrate this
 //     ($T: ident) => {
@@ -143,11 +210,12 @@ pub trait MatrixFunctions<T:MatrixValues> {
     fn new_square_with_constant_values(n_rows:usize, value: T) -> Matrix<T> ;
     fn new_with_constant_values(n_rows:usize, n_collumns: usize, value: T) -> Matrix<T> ;
     fn new_from_vector_rows(input: Vec<Vec<T>>) -> Matrix<T> ;
+    fn new_from_vector_is_collumn(collumn: Vec<T>) -> Matrix<T>;
     fn new_from_collumn(input_collumn: Collumn<T>) -> Matrix<T>;
     fn new_square_eye(size: usize, values_of_diagonal: T) -> Matrix<T> ;
     fn new_eye(n_rows: usize, n_collumns: usize, values_of_diagonal: T) -> Matrix<T> ;
     fn new_from_row_major_vector(vector: Vec<T>, height: usize, width: usize) -> Self ;
-    fn clone(&self) -> Matrix<T> ;
+    // fn clone(&self) -> Matrix<T> ;
     fn len(&self) -> usize ;
     fn row_length(&self) -> usize ;
     fn diagonal_contain_zeros(&self) -> bool ;
@@ -178,7 +246,7 @@ pub trait MatrixFunctions<T:MatrixValues> {
     fn append_collumn(&mut self, collumn: Collumn<T>) -> &Self ;
     fn append_row_from_vec(&mut self, new_row_vec: Vec<T>);
     fn multiply_all_elements_by(&mut self, factor: T) -> &Self;
-    fn divide_all_elements_by(&mut self, factor: T);
+    fn divide_all_elements_by(&mut self, factor: T) -> &Self;
     fn update(&mut self, rows: impl InputTraitRowCol, colls: impl InputTraitRowCol, new_values: impl InputMatrix<T>);
 
 }
@@ -214,6 +282,15 @@ macro_rules! impl_matrix_functions_for_type {
                 rows.push( Row { cells : dimension});
             }
             Matrix { rows }
+        }
+
+        fn new_from_vector_is_collumn(collumn: Vec<$T>) -> Matrix<$T> {
+            let n_rows = collumn.len();
+            let mut rows = Vec::<Row<$T>>::with_capacity(n_rows);
+            for index in 0..n_rows {
+                rows.push(Row::new_row_from_vec(vec![collumn[index]]));
+            }
+            Matrix{ rows }
         }
     
         fn new_from_collumn(input_collumn: Collumn<$T>) -> Matrix<$T>{
@@ -267,13 +344,13 @@ macro_rules! impl_matrix_functions_for_type {
             result_matrix
         }
     
-        fn clone(&self) -> Matrix<$T> {
-            let mut rows = Vec::<Row<$T>>::with_capacity(self.rows.len());
-            for row in &self.rows{
-                rows.push( row.clone());
-            }
-            Matrix { rows }
-        }
+        // fn clone(&self) -> Matrix<$T> {
+        //     let mut rows = Vec::<Row<$T>>::with_capacity(self.rows.len());
+        //     for row in &self.rows{
+        //         rows.push( row.clone());
+        //     }
+        //     Matrix { rows }
+        // }
     
         fn len(&self) -> usize {
             if self.row_length() >= self.coll_length() {
@@ -555,10 +632,11 @@ macro_rules! impl_matrix_functions_for_type {
             self
         }
     
-        fn divide_all_elements_by(&mut self, factor: $T) {
+        fn divide_all_elements_by(&mut self, factor: $T) -> &Self{
             for row_number in 0..self.rows.len() {
                 self.rows[row_number].divide_all_elements_by(factor);
             }
+            self
         }
 
         fn update(&mut self, rows: impl InputTraitRowCol, colls: impl InputTraitRowCol, new_values: impl InputMatrix<$T>) {

@@ -6,7 +6,7 @@ use std::ops::Mul;
 
 use crate::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Row<T: MatrixValues> {
     pub cells : Vec<T>,
 }
@@ -45,7 +45,7 @@ pub trait RowFunctions<T:MatrixValues> {
     fn new_row_with_constant_values(width: usize, value: T) -> Row<T>;
     fn len(&self) -> usize;
     fn export(self) -> Row<T>;
-    fn clone(&self) -> Row<T>;
+    // fn clone(&self) -> Row<T>;
     fn all_values_equal(&self, value: T) ->bool;
     fn divide_all_elements_by(&mut self, value: T)-> &mut Self;
     fn multiply_all_elements_by(&mut self, value: T)-> &mut Self;
@@ -58,7 +58,8 @@ pub trait RowFunctions<T:MatrixValues> {
 
 }
 
-impl<T: MatrixValues> Add for Row<T> {
+impl<T: MatrixValues + std::ops::Add> Add for Row<T> 
+where std::vec::Vec<T>: FromIterator<<T as std::ops::Add>::Output>{
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -70,7 +71,7 @@ impl<T: MatrixValues> Add for Row<T> {
     }
 }
 
-impl<T: MatrixValues> Mul for Row<T> {
+impl<T: MatrixValues + std::ops::Mul + std::iter::Sum<<T as std::ops::Mul>::Output>> Mul for Row<T> {
     type Output = T;
 
     fn mul(self, rhs: Self) -> Self::Output {
@@ -113,13 +114,13 @@ macro_rules! impl_row_type {
                 self
             }
         
-            fn clone(&self) -> Row<$T> {
-                let mut cells = Vec::<$T>::with_capacity(self.len());
-                for cell in &self.cells{
-                    cells.push(cell.clone());
-                }
-                Row { cells}
-            }
+            // fn clone(&self) -> Row<$T> {
+            //     let mut cells = Vec::<$T>::with_capacity(self.len());
+            //     for cell in &self.cells{
+            //         cells.push(cell.clone());
+            //     }
+            //     Row { cells}
+            // }
         
             fn all_values_equal(&self, value: $T) ->bool {
                 let mut no_inequality_found = true;
@@ -133,16 +134,16 @@ macro_rules! impl_row_type {
 
             fn divide_all_elements_by(&mut self, value: $T) -> &mut Self {
 
-                if *IS_AVX512 && USE_OPIMIZERS{
-                    unsafe {self.const_multiply_avx512_row(1 as $T/value)}
-                } else {
+                // if *IS_AVX512 && USE_OPIMIZERS{
+                //     unsafe {self.const_multiply_avx512_row(1 as $T/value)}
+                // } else {
 
                     for n in 0..self.cells.len() {
                         // if !(self.cells[n] == NumCast::from(0).unwrap()) {// quickly tested on some sparse matrices but seem to really boost performance. In some more filled ones: around 50x improvemnt, ful matrix not tested yet
                             self.cells[n] = self.cells[n] / value;
                         // }
                     }
-                }
+                // }
 
                 self
             }

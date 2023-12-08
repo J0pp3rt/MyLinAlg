@@ -66,12 +66,13 @@ pub fn golden_ratio_conjugate() -> f64 {
     1. / golden_ratio()
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Pos2<T>  {
     pub x: T,
     pub y: T
 }
 
+#[derive(Debug, Clone)]
 pub struct PosNDof<T>  {
     pub x: Vec<T>,
 }
@@ -111,14 +112,15 @@ pub trait Pos2Functions<T> {
     fn add_vector(&mut self, vector: SpatialVector2<T>) -> &mut Self;
 }
 
-pub trait PosNDofFunctions<T> {
+pub trait PosNDofFunctions<T: MatrixValues> {
     fn new(x: Vec<T>) -> Self;
-    fn clone(&self) -> Self;
     fn x(&self)  -> Vec<T>;
     fn x_ndof(&self, dof: usize) -> T ;
     fn n_dof(&self) -> usize;
+    fn as_vector(&self) -> SpatialVectorNDof<T>;
     fn add_vector(&mut self, vector: SpatialVectorNDof<T>) -> &mut Self;
     fn add_vector_vec(&mut self, vector: Vec<T>) -> &mut Self;
+    fn to_matrix(&self) -> Matrix<T>;
 }
 
 pub trait SpatialVector2Functions<T> {
@@ -139,11 +141,14 @@ pub trait SpatialVectorWithBase2Functions<T> {
     fn end_position(&self) -> Pos2<T>;
 }
 
-pub trait SpatialVectorNdofFunctions<T> {
+pub trait SpatialVectorNdofFunctions<T: MatrixValues> {
     fn export(self) -> Self;
     fn new_from_direction(direction_per_dof: Vec<T>) -> Self;
     fn from_difference(posndof_1: &PosNDof<T>, posndof_2: &PosNDof<T>) -> Self;
     fn volatile(&self) -> Self;
+    fn vector_to_matrix(&self) -> Matrix<T>;
+    fn vector_to_row(&self) -> Row<T>;
+    fn vector_to_collumn(&self) -> Collumn<T>;
     fn x_i_direction(&self, index: usize) -> T;
     fn set_vector_i_value(&mut self, index: usize, value: T) -> &mut Self;
     fn set_vector_values(&mut self, values: Vec<T>) -> &mut Self;
@@ -176,7 +181,7 @@ impl<T: std::ops::Mul + std::ops::Add + std::iter::Sum<<T as std::ops::Mul>::Out
     }
 }
 
-impl<T: std::ops::Add + Copy> Add for SpatialVectorNDof<T>  
+impl<T: std::ops::Add + Copy + MatrixValues> Add for SpatialVectorNDof<T>  
 where Vec<T>: FromIterator<<T as Add>::Output>, SpatialVectorNDof<T>: mathfunctions::SpatialVectorNdofFunctions<T>{
 
     type Output = Self;
@@ -187,7 +192,7 @@ where Vec<T>: FromIterator<<T as Add>::Output>, SpatialVectorNDof<T>: mathfuncti
     }
 }
 
-impl<T: std::ops::Sub + Copy> Sub for SpatialVectorNDof<T>
+impl<T: std::ops::Sub + Copy + MatrixValues> Sub for SpatialVectorNDof<T>
 where Vec<T>: FromIterator<<T as Sub>::Output>, SpatialVectorNDof<T>: mathfunctions::SpatialVectorNdofFunctions<T> {
     type Output = Self;
 
@@ -339,9 +344,9 @@ macro_rules! impl_spatial_types_per_type {
                 PosNDof {x}
             }
 
-            fn clone(&self) -> Self {
-                Self {x: self.x.clone()}
-            }
+            // fn clone(&self) -> Self {
+            //     Self {x: self.x.clone()}
+            // }
         
             fn x(&self) -> Vec<$T> {
                 self.x.clone()
@@ -355,6 +360,10 @@ macro_rules! impl_spatial_types_per_type {
                 self.x.len()
             }
 
+            fn as_vector(&self) -> SpatialVectorNDof<$T> {
+                SpatialVectorNDof {vector: self.x.clone()}
+            }
+
             fn add_vector(&mut self, vector: SpatialVectorNDof<$T>) -> &mut Self {
                 self.add_vector_vec(vector.vector)
             }
@@ -366,6 +375,10 @@ macro_rules! impl_spatial_types_per_type {
 
                 self.x = self.x.iter().zip(vector.iter()).map(|(point_xi, vector_xi)| point_xi + vector_xi).collect();
                 self
+            }
+
+            fn to_matrix(&self) -> Matrix<$T> {
+                Matrix::new_from_vector_is_collumn(self.x.clone())
             }
         }
 
@@ -388,6 +401,10 @@ macro_rules! impl_spatial_types_per_type {
 
             fn volatile(&self) -> Self {
                 self.clone()
+            }
+
+            fn vector_to_matrix(&self) -> Matrix<$T> {
+                Matrix::new_from_vector_is_collumn(self.vector.clone())
             }
         
             fn x_i_direction(&self, index: usize) -> $T {
@@ -418,6 +435,14 @@ macro_rules! impl_spatial_types_per_type {
 
             fn vector(&self) -> SpatialVectorNDof<$T> {
                 self.clone()
+            }
+
+            fn vector_to_row(&self) -> Row<$T> {
+                Row::new_row_from_vec(self.vector.clone())
+            }
+
+            fn vector_to_collumn(&self) -> Collumn<$T> {
+                Collumn::new_form_vec(self.vector.clone())
             }
         
             // fn get_normals(&self) -> [Self; 2] {
@@ -473,6 +498,10 @@ macro_rules! impl_spatial_types_per_type {
             fn volatile(&self) -> Self {
                 self.clone()
             }
+
+            fn vector_to_matrix(&self) -> Matrix<$T> {
+                Matrix::new_from_vector_is_collumn(self.vector.clone())
+            }
         
             fn x_i_direction(&self, index: usize) -> $T {
                 self.vector[index]
@@ -502,6 +531,14 @@ macro_rules! impl_spatial_types_per_type {
 
             fn vector(&self) -> SpatialVectorNDof<$T> {
                 SpatialVectorNDof::new_from_direction(self.vector.clone())
+            }
+
+            fn vector_to_row(&self) -> Row<$T> {
+                Row::new_row_from_vec(self.vector.clone())
+            }
+
+            fn vector_to_collumn(&self) -> Collumn<$T> {
+                Collumn::new_form_vec(self.vector.clone())
             }
 
             // fn get_normals(&self) -> [Self; 2] {
@@ -595,10 +632,13 @@ pub trait MathFunctions<T:MatrixValues> {
     fn abs(value: T) -> T ;
     fn vec_dot_vec(vec_1: Vec<T>, vec_2: Vec<T>) -> T ;
     fn vec_summed(vec_1: Vec<T>) -> T ;
-    fn row_dot_collumn(row: & Row<T>, collumn: & Collumn<T>) -> T ;
-    fn matrix_dot_collumn(matrix: & Matrix<T>, collumn: & Collumn<T>) -> Collumn<T> ;
+    fn row_dot_collumn(row: &Row<T>, collumn: &Collumn<T>) -> T ;
+    fn row_dot_matrix(row: &Row<T>, matrix: &Matrix<T>) -> Row<T>;
+    fn collumn_dot_row(collumn: &Collumn<T>, row: &Row<T>) -> Matrix<T>;
+    fn matrix_dot_collumn(matrix: &Matrix<T>, collumn: &Collumn<T>) -> Collumn<T> ;
     fn matrix_add_matrix(mut A_matrix: Matrix<T>, B_matrix:& Matrix<T>) -> Matrix<T> {todo!()}
     fn matrix_dot_matrix(A_matrix:& Matrix<T>, B_matrix:& Matrix<T>) -> Matrix<T> ;
+    fn as_matrix(&self, size: usize) -> Matrix<T>;
 }
 
 macro_rules! impl_math_functions_per_type {
@@ -650,7 +690,7 @@ macro_rules! impl_math_functions_per_type {
             total
         }
 
-        fn row_dot_collumn(row: & Row<$T>, collumn: & Collumn<$T>) -> $T {
+        fn row_dot_collumn(row: &Row<$T>, collumn: &Collumn<$T>) -> $T {
             if !(row.len() == collumn.n_rows()) {
                 panic!("Dimension of Row length must match collumn height. Row has dimension [1x{}], Collumn has [{}x1]", row.len(), collumn.n_rows());
             }
@@ -665,6 +705,25 @@ macro_rules! impl_math_functions_per_type {
 
             $T::vec_summed(piecewice_mut)
 
+        }
+
+        fn row_dot_matrix(row: &Row<$T>, matrix: &Matrix<$T>) -> Row<$T> {
+            assert!(row.len() == matrix.height(), "Row x Matrix dimensions do not match!");
+
+            let result_vec = (0..matrix.height()).map(|index| $T::row_dot_collumn(row, &matrix.get_collumn(index))).collect::<Vec<$T>>();
+            Row {cells: result_vec}
+        }
+
+        fn collumn_dot_row(collumn: &Collumn<$T>, row: &Row<$T>) -> Matrix<$T> {
+            assert!(collumn.len() == row.len(), "collumn x row dimensions do not agree!");
+
+            let mut rows = Vec::<Row<$T>>::with_capacity(collumn.len());
+            for index_r in 0..collumn.len() {
+                let cells = (0..collumn.len()).map(|index_c| row[index_r] * collumn[index_c]).collect::<Vec<$T>>();
+                rows.push(Row{ cells })
+            }
+
+            Matrix {rows}
         }
 
         fn matrix_dot_collumn(matrix: & Matrix<$T>, collumn: & Collumn<$T>) -> Collumn<$T> {
@@ -721,6 +780,10 @@ macro_rules! impl_math_functions_per_type {
             }
 
             C_matrix
+        }
+
+        fn as_matrix(&self, size: usize) -> Matrix<$T> {
+            Matrix::new_square_with_constant_values(size,*self)
         }
     }
     };
