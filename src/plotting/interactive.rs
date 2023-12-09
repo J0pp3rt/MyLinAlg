@@ -11,19 +11,22 @@ const PLOT_RESOLUTION_FACTOR: u32 = 2;
 
 #[derive(Clone)]
 pub struct InteractivePlotSettings{
-    x_range: Range<f64>,
-    y_range: Range<f64>,
-    plot_height: u32,
-    plot_width: u32
+    pub x_range: Range<f64>,
+    pub y_range: Range<f64>,
+    pub plot_height: u32,
+    pub plot_width: u32,
+    pub some_input_number: usize,
+
 }
 
 impl Default for InteractivePlotSettings {
     fn default() -> Self {
         Self { 
-            x_range: 0. .. 1., 
-            y_range: 0. .. 1., 
+            x_range: -5. .. 5., 
+            y_range: -5. .. 5., 
             plot_height: 1000, 
-            plot_width: 1000 }
+            plot_width: 1000,
+            some_input_number: 10}
     }
 }
 
@@ -34,7 +37,8 @@ struct InteractivePlot {
     x_range: Range<f64>,
     y_range: Range<f64>,
     plot_height: u32,
-    plot_width: u32
+    plot_width: u32,
+    some_input_number: usize,
 }
 
 pub fn make_interactive_plot(function_to_plot: Rc<Box<dyn Fn(InteractivePlotSettings) -> PlotBuilder<f64>>>) {
@@ -74,7 +78,8 @@ impl InteractivePlot {
             x_range: plot_settings.x_range, 
             y_range: plot_settings.y_range, 
             plot_height: plot_settings.plot_height, 
-            plot_width: plot_settings.plot_width}
+            plot_width: plot_settings.plot_width,
+            some_input_number: 1}
     }
 
     // fn make_plot_settings(&self) -> InteractivePlotSettings {
@@ -84,6 +89,18 @@ impl InteractivePlot {
     //         plot_height: self.plot_height, 
     //         plot_width: self.plot_width }
     // }
+
+    fn reprocess_function(&mut self) {
+        let settings = InteractivePlotSettings { 
+            x_range: self.x_range.clone(), 
+            y_range: self.y_range.clone(), 
+            plot_height: self.plot_height, 
+            plot_width: self.plot_width, 
+            some_input_number: self.some_input_number 
+        };
+        let new_plot_builder = (self.plot_builder_function)(settings);
+        self.saved_plot = new_plot_builder;
+    }
 
     fn update_plot_lazy(&mut self) {
         self.saved_plot.x_range = Option::Some(self.x_range.clone());
@@ -109,7 +126,7 @@ impl InteractivePlot {
         let start_texture = Instant::now();
         self.plot_texture_handle.set(plot_color_image, Default::default());
         let stop_texture = start_texture.elapsed();
-        println!("render: {:?}, image: {:?}, texture: {:?}", stop_render, stop_image, stop_texture);   
+        // println!("render: {:?}, image: {:?}, texture: {:?}", stop_render, stop_image, stop_texture);   
     }
 
 }
@@ -118,15 +135,21 @@ impl eframe::App for InteractivePlot {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
 
         let mut plot_has_been_altered_lazy = false;
+        let mut plot_has_changed_reprocess = false;
         // let window_info =  frame.viewport()
         // ctx.available_rect()
 
         egui::SidePanel::right("the right panel").exact_width(100.).show(ctx, |ui| {
-            ui.label("label text")
+            ui.label("label text");
+            if ui.button("itterate").clicked() {
+                self.some_input_number += 10;
+                plot_has_changed_reprocess = true;
+                plot_has_been_altered_lazy = true;
+            }
         });
         egui::CentralPanel::default().show(ctx, |ui| {
             let window_size = ui.available_size_before_wrap();
-            println!("windowsize {:?}", window_size);
+            // println!("windowsize {:?}", window_size);
 
             if !(window_size.x as u32 == 0) {
                 plot_has_been_altered_lazy = true;
@@ -165,7 +188,6 @@ impl eframe::App for InteractivePlot {
                 let (y_range_low, y_range_high) = (self.y_range.start, self.y_range.end);
                 let plotted_x_range = x_range_high - x_range_low;
                 let plotted_y_range = y_range_high - y_range_low;
-                
                 self.x_range = (x_range_low - plotted_x_range*relative_drag_x) .. (x_range_high - plotted_x_range*relative_drag_x);
                 self.y_range = (y_range_low + plotted_y_range*relative_drag_y) .. (y_range_high + plotted_y_range*relative_drag_y);
                 
@@ -174,7 +196,6 @@ impl eframe::App for InteractivePlot {
             let delta_scroll: f32 = ui.input(|i|i.scroll_delta.y);
             if !(delta_scroll == 0.) {
                 plot_has_been_altered_lazy = true;
-                println!("updaring ranges");
                 let scroll_factor: f64 = 0.001;
                 let zoom_value = delta_scroll as f64 * scroll_factor;
 
@@ -182,12 +203,13 @@ impl eframe::App for InteractivePlot {
                 let (y_range_low, y_range_high) = (self.y_range.start, self.y_range.end);
                 let plotted_x_range = x_range_high - x_range_low;
                 let plotted_y_range = y_range_high - y_range_low;
-                println!("self.x_range");
                 self.x_range = (x_range_low + plotted_x_range*zoom_value) .. (x_range_high - plotted_x_range*zoom_value);
                 self.y_range = (y_range_low + plotted_y_range*zoom_value) .. (y_range_high - plotted_y_range*zoom_value);
             }
         });
-
+        if plot_has_changed_reprocess {
+            self.reprocess_function();
+        }
         if plot_has_been_altered_lazy {
             self.update_lazy_and_render();
         }

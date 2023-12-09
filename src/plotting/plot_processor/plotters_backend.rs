@@ -72,12 +72,12 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
 
             let mut chart = ChartBuilder::on(&root);
             chart
-            .x_label_area_size(self.plots.plotting_settings.plotters_x_label_area_size)
-            .y_label_area_size(self.plots.plotting_settings.plotters_y_label_area_size)
-            .right_y_label_area_size(self.plots.plotting_settings.plotters_right_y_label_area_size)
-            .margin(self.plots.plotting_settings.plotters_margin)
-            .caption(title_of_figure, ("sans-serif", 25.).into_font());
-
+                .x_label_area_size(self.plots.plotting_settings.plotters_x_label_area_size)
+                .y_label_area_size(self.plots.plotting_settings.plotters_y_label_area_size)
+                .right_y_label_area_size(self.plots.plotting_settings.plotters_right_y_label_area_size)
+                .margin(self.plots.plotting_settings.plotters_margin)
+                .caption(title_of_figure, ("sans-serif", 25.).into_font());
+   
             // get ready for some an-idiometicness
             match (x_axis_scaling, y_axis_scaling, y2_axis_scaling) {
                 (PlotAxisScaling::Linear, PlotAxisScaling::Linear, PlotAxisScaling::NoAxis) => {
@@ -463,8 +463,6 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type {
                 let mut pixmap = Pixmap::new(self.plots.plot_width.unwrap(), self.plots.plot_height.unwrap()).expect("Error creating pixmap");
                 resvg_tree.render(Default::default(), &mut pixmap.as_mut());
                 let time_render_2 = start_render_2.elapsed();
-
-                println!("time svg: {:?}, time parsing {:?}, time_render2: {:?}", time_svg, time_parsing, time_render_2);
             
                 pixmap.take()
             }
@@ -658,9 +656,7 @@ macro_rules! produce_other_2d_plot_settings {
                     line_color = $self.plots.plotting_settings.color_map.get_color(number as f32/ amount_of_lines as f32);
                 }
             }
-
             let style = ShapeStyle {color: line_color, filled: marker_fill, stroke_width: line_width};
-
             if !(series.on_secondary_axis) {
                 $chart
                     .draw_series(LineSeries::new(series.x_values.iter().zip(series.y_values.clone()).map(|(x, y)| (*x as f64, y as f64)), style)

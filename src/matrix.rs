@@ -6,8 +6,11 @@ use crate::*;
 
 use std::ops::Sub;
 use std::ops::Mul;
+use std::ops::Add;
+use std::ops::Div;
+use std::marker::PhantomData;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Matrix<T: MatrixValues> {
     pub rows : Vec<Row<T>>
 }
@@ -17,53 +20,50 @@ pub trait MatrixValues: Copy + Display + PartialEq + Num + NumCast + Copy +std::
 impl<T> MatrixValues for T where T: Copy + Display + PartialEq + Num + NumCast + Copy +std::iter::Sum+ 'static{
 }
 
-impl<T: MatrixValues + std::ops::AddAssign> Add for Matrix<T> {
-    type Output = Self;
+// impl<T: MatrixValues + std::ops::AddAssign> Add for Matrix<T> {
+//     type Output = Self;
 
-    fn add(mut self, rhs: Self) -> Self::Output {
-        assert!(self.rows.len() == rhs.rows.len(), "Provided matrices for addition do not contain same number of rows");
+//     fn add(mut self, rhs: Self) -> Self::Output {
+//         assert!(self.rows.len() == rhs.rows.len(), "Provided matrices for addition do not contain same number of rows");
 
-        for (row_lhs, row_rhs) in self.rows.iter_mut().zip(rhs.rows.iter()) {
-            for (cell_lhs, cell_rhs) in row_lhs.cells.iter_mut().zip(row_rhs.cells.iter()) {
-                *cell_lhs += *cell_rhs
-            }
-        }
+//         for (row_lhs, row_rhs) in self.rows.iter_mut().zip(rhs.rows.iter()) {
+//             for (cell_lhs, cell_rhs) in row_lhs.cells.iter_mut().zip(row_rhs.cells.iter()) {
+//                 *cell_lhs += *cell_rhs
+//             }
+//         }
 
-        self
-    }
-}
+//         self
+//     }
+// }
 
-impl<T: MatrixValues + std::ops::Neg> Sub for Matrix<T> {
-    type Output = Matrix<T>;
+// impl<T: MatrixValues + std::ops::Neg> Sub for Matrix<T> {
+//     type Output = Matrix<T>;
 
-    fn sub(mut self, rhs: Self) -> Self::Output {
-        assert!(self.rows.len() == rhs.rows.len(), "Provided matrices for substraction do not contain same number of rows");
+//     fn sub(mut self, rhs: Self) -> Self::Output {
+//         assert!(self.rows.len() == rhs.rows.len(), "Provided matrices for substraction do not contain same number of rows");
 
-        for (row_lhs, row_rhs) in self.rows.iter_mut().zip(rhs.rows.iter()) {
-            assert!(row_lhs.cells.len() == row_rhs.cells.len(), "Provided matrices for substraction do not contain same number of collumns");
-            for (cell_lhs, cell_rhs) in row_lhs.cells.iter_mut().zip(row_rhs.cells.iter()) {
-                *cell_lhs = *cell_lhs -(*cell_rhs)
-            }
-        }
+//         for (row_lhs, row_rhs) in self.rows.iter_mut().zip(rhs.rows.iter()) {
+//             assert!(row_lhs.cells.len() == row_rhs.cells.len(), "Provided matrices for substraction do not contain same number of collumns");
+//             for (cell_lhs, cell_rhs) in row_lhs.cells.iter_mut().zip(row_rhs.cells.iter()) {
+//                 *cell_lhs = *cell_lhs -(*cell_rhs)
+//             }
+//         }
 
-        self
-    }
-}
+//         self
+//     }
+// }
 
-macro_rules! impl_mult_matrix_per_type {
-    ($T:ident) => {
-        impl Mul for Matrix<$T> {
-            type Output = Self;
+// macro_rules! impl_mult_matrix_per_type {
+//     ($T:ident) => {
+//         impl Mul for Matrix<$T> {
+//             type Output = Self;
 
-            fn mul(self, rhs: Self) -> Self::Output {
-                $T::matrix_dot_matrix(&self, &rhs)
-            }
-        }
-    };
-}
-
-impl_mult_matrix_per_type!(f32);
-impl_mult_matrix_per_type!(f64);
+//             fn mul(self, rhs: Self) -> Self::Output {
+//                 $T::matrix_dot_matrix(&self, &rhs)
+//             }
+//         }
+//     };
+// }
 
 // impl<T: MatrixValues> Mul for Matrix<T> {
 //     type Output = Self;
@@ -229,6 +229,7 @@ pub trait MatrixFunctions<T:MatrixValues> {
     fn get_collumn(&self, coll_number : usize) -> Collumn<T> ;
     fn to_vec_collumn_major(&self) -> Vec<T> ;
     fn to_vec_row_major(&self) -> Vec<T> ;
+    fn inverse_through_gauss(&self) -> Self;
     fn swap_rows(&mut self, row_1: usize, row_2: usize);
     fn substract_internal_row_from_row_by_index(&mut self, row_number_to_substract: usize, from_row_number: usize);
     fn substract_multiplied_internal_row_from_row_by_index(&mut self, row_number_to_substract_with: usize, factor: T , from_row_number: usize) ;
@@ -303,7 +304,6 @@ macro_rules! impl_matrix_functions_for_type {
         }
     
         fn new_square_eye(size: usize, values_of_diagonal: $T) -> Matrix<$T> {
-            println!("creating fixed ");
             let mut new_matrix: Matrix<$T> = Matrix::new_square_with_constant_values(size, NumCast::from(0).unwrap());
             for j in 0..size {
                 new_matrix[j][j] = values_of_diagonal;
@@ -467,6 +467,14 @@ macro_rules! impl_matrix_functions_for_type {
             }
     
             output_vec
+        }
+
+        fn inverse_through_gauss(&self) -> Self {
+            assert!(self.height() == self.width(), "Can not find inverse if matrix not square");
+
+            let eye = Matrix::new_square_eye(self.height(), 1 as $T);
+            let solved_system = $T::solve_with_guass(Solver2D {A_matrix: self.clone(), B_matrix: eye, solver: Solver2DStrategy::Guass});
+            solved_system.B_matrix
         }
     
         fn swap_rows(&mut self, row_1: usize, row_2: usize){
@@ -704,6 +712,109 @@ macro_rules! impl_matrix_functions_for_type {
 //         i += 1;
 //     }
 // }
+
+macro_rules! impl_std_ops_matrix_per_type {
+    ($T: ident) => {
+        impl Add for Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn add(mut self, rhs: Self) -> Self::Output {
+                assert!(self.height() == rhs.height() && self.width() == rhs.width(), "Provided matrices do not match dimensions");
+                for i_r in 0 .. self.rows.len() {
+                    for i_c in 0.. self.rows[0].cells.len() {
+                        self[i_r][i_c] += rhs[i_r][i_c];
+                    }
+                }
+                self
+            }
+        }
+
+        impl Sub<Matrix<$T>> for Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn sub(mut self, rhs: Matrix<$T>) -> Self::Output {
+                assert!(self.height() == rhs.height() && self.width() == rhs.width(), "Provided matrices do not match dimensions");
+                for i_r in 0 .. self.rows.len() {
+                    for i_c in 0.. self.rows[0].cells.len() {
+                        self[i_r][i_c] += - rhs[i_r][i_c];
+                    }
+                }
+                self
+            }
+        }
+
+        impl Mul<Collumn<$T>> for Matrix<$T> {
+            type Output = Collumn<$T>;
+
+            fn mul(self, rhs: Collumn<$T>) -> Self::Output {
+                $T::matrix_dot_collumn(&self, &rhs)
+            }
+        }
+
+        impl Mul<SpatialVectorNDof<$T, IsColl>> for Matrix<$T> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn mul(self, rhs: SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                let rhs = rhs.to_collumn();
+                let result_collumn = $T::matrix_dot_collumn(&self, &rhs);
+                SpatialVectorNDof { vector: result_collumn.cells, _orientation: PhantomData::<IsColl> }
+            }
+        }
+
+        impl Mul<Matrix<$T>> for Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: Matrix<$T>) -> Self::Output {
+                $T::matrix_dot_matrix(&self, &rhs)
+            }
+        }
+
+        impl Mul<Row<$T>> for Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: Row<$T>) -> Self::Output {
+                $T::matrix_dot_row(&self, &rhs)
+            }
+        }
+
+        impl Mul<SpatialVectorNDof<$T, IsRow>> for Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: SpatialVectorNDof<$T, IsRow>) -> Self::Output {
+                let rhs = rhs.to_row();
+                $T::matrix_dot_row(&self, &rhs)
+            }
+        }
+
+        impl Mul<$T> for Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(mut self, rhs: $T) -> Self::Output {
+                self.multiply_all_elements_by(rhs);
+                self
+            }
+        }
+
+        impl Div<$T> for Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn div(mut self, rhs: $T) -> Self::Output {
+                self.divide_all_elements_by(rhs);
+                self
+            }
+        }
+    };
+}
+
+impl_std_ops_matrix_per_type!(i8);
+impl_std_ops_matrix_per_type!(i16);
+impl_std_ops_matrix_per_type!(i32);
+impl_std_ops_matrix_per_type!(i64);
+
+impl_std_ops_matrix_per_type!(isize);
+
+impl_std_ops_matrix_per_type!(f32);
+impl_std_ops_matrix_per_type!(f64);
 
 impl_matrix_functions_for_type!(i8);
 impl_matrix_functions_for_type!(i16);

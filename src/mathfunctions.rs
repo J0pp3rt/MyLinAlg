@@ -4,6 +4,7 @@
 
 use crate::*;
 use std::ops::{Mul, Sub};
+use std::marker::PhantomData;
 
 pub struct Polynomial<T> {
     coefficients: Vec<T> // ascending order: c_0 + c_1*x + c_2*x^2
@@ -83,23 +84,33 @@ pub struct SpatialVector2<T>  {
     pub y_direction: T
 }
 
+
 #[derive(Debug, Clone)]
 pub struct SpatialVectorWithBase2<T>  {
     pub x_base: T,
     pub y_base: T,
     pub x_direction: T,
-    pub y_direction: T
+    pub y_direction: T,
 }
 
 #[derive(Clone)]
-pub struct SpatialVectorNDof<T> {
+pub struct NoDir {}
+#[derive(Clone)]
+pub struct IsColl {}
+#[derive(Clone)]
+pub struct IsRow {}
+
+#[derive(Clone)]
+pub struct SpatialVectorNDof<T, Orientation> {
     pub vector: Vec<T>,
+    pub _orientation: PhantomData<Orientation>,
 }
 
 #[derive(Clone)]
-pub struct SpatialVectorWithBasePointNDof<T> {
+pub struct SpatialVectorWithBasePointNDof<T, Orientation> {
     pub point: Vec<T>,
-    pub vector: Vec<T>
+    pub vector: Vec<T>,
+    pub _orientation: PhantomData<Orientation>,
 }
 
 // Impl
@@ -117,8 +128,8 @@ pub trait PosNDofFunctions<T: MatrixValues> {
     fn x(&self)  -> Vec<T>;
     fn x_ndof(&self, dof: usize) -> T ;
     fn n_dof(&self) -> usize;
-    fn as_vector(&self) -> SpatialVectorNDof<T>;
-    fn add_vector(&mut self, vector: SpatialVectorNDof<T>) -> &mut Self;
+    fn as_vector(&self) -> SpatialVectorNDof<T, IsColl>;
+    fn add_vector(&mut self, vector: SpatialVectorNDof<T, IsColl>) -> &mut Self;
     fn add_vector_vec(&mut self, vector: Vec<T>) -> &mut Self;
     fn to_matrix(&self) -> Matrix<T>;
 }
@@ -141,9 +152,8 @@ pub trait SpatialVectorWithBase2Functions<T> {
     fn end_position(&self) -> Pos2<T>;
 }
 
-pub trait SpatialVectorNdofFunctions<T: MatrixValues> {
+pub trait SpatialVectorNdofFunctions<T: MatrixValues, Orientation = IsColl> {
     fn export(self) -> Self;
-    fn new_from_direction(direction_per_dof: Vec<T>) -> Self;
     fn from_difference(posndof_1: &PosNDof<T>, posndof_2: &PosNDof<T>) -> Self;
     fn volatile(&self) -> Self;
     fn vector_to_matrix(&self) -> Matrix<T>;
@@ -152,7 +162,7 @@ pub trait SpatialVectorNdofFunctions<T: MatrixValues> {
     fn x_i_direction(&self, index: usize) -> T;
     fn set_vector_i_value(&mut self, index: usize, value: T) -> &mut Self;
     fn set_vector_values(&mut self, values: Vec<T>) -> &mut Self;
-    fn vector(&self) -> SpatialVectorNDof<T>;
+    fn vector(&self) -> SpatialVectorNDof<T, IsColl>;
     fn length(&self) -> T;
     fn normalize(&mut self) -> &mut Self;
     // fn get_normals(&self) -> [Self; 2] where Self: Sized;
@@ -162,8 +172,14 @@ pub trait SpatialVectorNdofFunctions<T: MatrixValues> {
     fn n_dof(&self) -> usize;
 }
 
-pub trait SpatialVectorWithBaseNDofFunctions<T> {
-    fn new_with_base(base_point: &Vec<T>, directions: &Vec<T>) -> Self;
+impl<T: MatrixValues> SpatialVectorNDof<T, IsColl> {
+    pub fn new_from_direction(direction_per_dof: Vec<T>) -> Self {
+        SpatialVectorNDof {vector: direction_per_dof, _orientation: PhantomData::<IsColl>}
+    }
+}
+
+pub trait SpatialVectorWithBaseNDofFunctions<T, Orientation = IsColl> {
+    fn new_with_base(base_point: &Vec<T>, directions: &Vec<T>) -> SpatialVectorWithBasePointNDof<T, IsColl>;
     fn base_direction_from_difference(base_point: &PosNDof<T>, pos1: &PosNDof<T>, pos2: &PosNDof<T>) -> Self;
     fn base_at_first_direction_from_difference(pos1: &PosNDof<T>, pos2: &PosNDof<T>) -> Self;
     fn base_point(&self) -> PosNDof<T>;
@@ -173,34 +189,106 @@ pub trait SpatialVectorWithBaseNDofFunctions<T> {
     fn move_base_to_end_position(&mut self) -> &mut Self;
 }
 
-impl<T: std::ops::Mul + std::ops::Add + std::iter::Sum<<T as std::ops::Mul>::Output> + Copy> Mul for SpatialVectorNDof<T> {
-    type Output = T;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        self.vector.iter().zip(rhs.vector.iter()).map(|(x_l, x_r)| *x_l * *x_r).sum()
+impl<T: MatrixValues> SpatialVectorWithBasePointNDof<T, IsColl> {
+    pub fn new_from_direction(point: Vec<T>, direction_per_dof: Vec<T>) -> Self {
+        let n_dof = direction_per_dof.len();
+        Self {point, vector: direction_per_dof, _orientation: PhantomData}
     }
 }
 
-impl<T: std::ops::Add + Copy + MatrixValues> Add for SpatialVectorNDof<T>  
-where Vec<T>: FromIterator<<T as Add>::Output>, SpatialVectorNDof<T>: mathfunctions::SpatialVectorNdofFunctions<T>{
+pub trait TransposeRowToCollumn<T: MatrixValues> {
+    fn transpose(&self) -> SpatialVectorNDof<T,IsColl>;
+    fn T(&self) -> SpatialVectorNDof<T,IsColl>;
+    fn is_now_row(&self) -> &Self;
+}
 
-    type Output = Self;
+impl<T: MatrixValues> TransposeRowToCollumn<T> for SpatialVectorNDof<T, IsRow> {
+    fn transpose(&self) -> SpatialVectorNDof<T,IsColl> {
+        SpatialVectorNDof::<T,IsColl> {
+            vector: self.vector.clone(),
+            _orientation: PhantomData,
+        }
+    }
 
-    fn add(self, rhs: Self) -> Self::Output {
-        let new_vector: Vec<T> = self.vector.iter().zip(rhs.vector.iter()).map(|(x_l, x_r)| *x_l + *x_r).collect();
-        SpatialVectorNdofFunctions::<T>::new_from_direction(new_vector)
+    fn T(&self) -> SpatialVectorNDof<T,IsColl> {
+        SpatialVectorNDof::<T,IsColl> {
+            vector: self.vector.clone(),
+            _orientation: PhantomData,
+        }
+    }
+
+    fn is_now_row(&self) -> &Self {
+        self
     }
 }
 
-impl<T: std::ops::Sub + Copy + MatrixValues> Sub for SpatialVectorNDof<T>
-where Vec<T>: FromIterator<<T as Sub>::Output>, SpatialVectorNDof<T>: mathfunctions::SpatialVectorNdofFunctions<T> {
-    type Output = Self;
+pub trait TransposeCollumnToRow<T: MatrixValues> {
+    fn transpose(&self) -> SpatialVectorNDof<T,IsRow> ;
+    fn T(&self) -> SpatialVectorNDof<T,IsRow> ;
+    fn is_now_collumn(&self) -> &Self;
+}
 
-    fn sub(self, rhs: Self) -> Self::Output {
-        let new_vector: Vec<T> = self.vector.iter().zip(rhs.vector.iter()).map(|(x_l, x_r)| *x_l - *x_r).collect();
-        SpatialVectorNdofFunctions::<T>::new_from_direction(new_vector)
+impl<T: MatrixValues> TransposeCollumnToRow<T> for SpatialVectorNDof<T, IsColl> {
+    fn transpose(&self) -> SpatialVectorNDof<T,IsRow> {
+        SpatialVectorNDof::<T,IsRow> {
+            vector: self.vector.clone(),
+            _orientation: PhantomData,
+        }
+    }
+
+    fn T(&self) -> SpatialVectorNDof<T,IsRow> {
+        SpatialVectorNDof::<T,IsRow> {
+            vector: self.vector.clone(),
+            _orientation: PhantomData,
+        }
+    }
+
+    fn is_now_collumn(&self) -> &Self {
+        self
     }
 }
+
+// macro_rules! impl_std_ops_spatials {
+//     ($T: ident) => {
+//         impl Add for SpatialVectorNDof<$T, IsColl> {
+//             type Output = Self;
+
+//             fn add(self, rhs)
+//         }
+//     };
+// }
+
+
+// impl<T: std::ops::Mul + std::ops::Add + std::iter::Sum<<T as std::ops::Mul>::Output> + Copy> Mul for SpatialVectorNDof<T> {
+//     type Output = T;
+
+//     fn mul(self, rhs: Self) -> Self::Output {
+//         self.vector.iter().zip(rhs.vector.iter()).map(|(x_l, x_r)| *x_l * *x_r).sum()
+//     }
+// }
+
+// impl<T: std::ops::Add + Copy + MatrixValues, Orrientation> Add for SpatialVectorNDof<T, Orrientation>  
+// where Vec<T>: FromIterator<<T as Add>::Output>, SpatialVectorNDof<T>: mathfunctions::SpatialVectorNdofFunctions<T,Orrientation>{
+
+//     type Output = Self;
+
+//     fn add(self, rhs: Self) -> Self::Output {
+//         let new_vector: Vec<T> = self.vector.iter().zip(rhs.vector.iter()).map(|(x_l, x_r)| *x_l + *x_r).collect();
+//         // SpatialVectorNdofFunctions::new_from_direction(new_vector)
+//         todo!()
+//     }
+// }
+
+// impl<T: std::ops::Sub + Copy + MatrixValues, Orrientation> Sub for SpatialVectorNDof<T, Orrientation>
+// where Vec<T>: FromIterator<<T as Sub>::Output>, SpatialVectorNDof<T>: mathfunctions::SpatialVectorNdofFunctions<T, Orrientation> {
+//     type Output = Self;
+
+//     fn sub(self, rhs: Self) -> Self::Output {
+//         let new_vector: Vec<T> = self.vector.iter().zip(rhs.vector.iter()).map(|(x_l, x_r)| *x_l - *x_r).collect();
+//         // SpatialVectorNdofFunctions::new_from_direction(new_vector)
+//         todo!()
+//     }
+// }
 
 macro_rules! impl_spatial_types_per_type {
     ($T: ident) => {
@@ -360,11 +448,11 @@ macro_rules! impl_spatial_types_per_type {
                 self.x.len()
             }
 
-            fn as_vector(&self) -> SpatialVectorNDof<$T> {
-                SpatialVectorNDof {vector: self.x.clone()}
+            fn as_vector(&self) -> SpatialVectorNDof<$T, IsColl> {
+                SpatialVectorNDof {vector: self.x.clone(), _orientation: PhantomData}
             }
 
-            fn add_vector(&mut self, vector: SpatialVectorNDof<$T>) -> &mut Self {
+            fn add_vector(&mut self, vector: SpatialVectorNDof<$T, IsColl>) -> &mut Self {
                 self.add_vector_vec(vector.vector)
             }
 
@@ -382,13 +470,9 @@ macro_rules! impl_spatial_types_per_type {
             }
         }
 
-        impl SpatialVectorNdofFunctions<$T> for SpatialVectorNDof<$T> {
+        impl<Orientation: Clone> SpatialVectorNdofFunctions<$T, Orientation> for SpatialVectorNDof<$T,Orientation> {
             fn export(self) -> Self {
                 self
-            }
-
-            fn new_from_direction(direction_per_dof: Vec<$T>) -> Self {
-                SpatialVectorNDof {vector: direction_per_dof}
             }
 
             fn from_difference(posndof_1: &PosNDof<$T>, posndof_2: &PosNDof<$T>) -> Self {
@@ -396,7 +480,7 @@ macro_rules! impl_spatial_types_per_type {
                     panic!("Differentiated points do not have equal number of DOF's!")
                 }
                 let directions = posndof_1.x.iter().zip(posndof_2.x.iter()).map(|(point_1_x, point_2_x)| point_2_x - point_1_x).collect();
-                SpatialVectorNDof {vector: directions}
+                SpatialVectorNDof {vector: directions, _orientation: PhantomData}
             }
 
             fn volatile(&self) -> Self {
@@ -433,8 +517,8 @@ macro_rules! impl_spatial_types_per_type {
                 self
             }
 
-            fn vector(&self) -> SpatialVectorNDof<$T> {
-                self.clone()
+            fn vector(&self) -> SpatialVectorNDof<$T, IsColl> {
+                SpatialVectorNDof::new_from_direction(self.vector.clone())
             }
 
             fn vector_to_row(&self) -> Row<$T> {
@@ -474,15 +558,9 @@ macro_rules! impl_spatial_types_per_type {
             }
         }
 
-        impl SpatialVectorNdofFunctions<$T> for SpatialVectorWithBasePointNDof<$T> {
+        impl SpatialVectorNdofFunctions<$T, IsColl> for SpatialVectorWithBasePointNDof<$T,IsColl> {
             fn export(self) -> Self {
                 self
-            }
-
-            fn new_from_direction(direction_per_dof: Vec<$T>) -> Self {
-                let n_dof = direction_per_dof.len();
-                let point = vec![0 as $T; n_dof];
-                Self {point, vector: direction_per_dof}
             }
 
             fn from_difference(posndof_1: &PosNDof<$T>, posndof_2: &PosNDof<$T>) -> Self {
@@ -492,7 +570,7 @@ macro_rules! impl_spatial_types_per_type {
                 let directions = posndof_1.x.iter().zip(posndof_2.x.iter()).map(|(point_1_x, point_2_x)| point_2_x - point_1_x).collect();
                 let n_dof = posndof_1.x.len();
                 let point = vec![0 as $T; n_dof];
-                Self {point, vector: directions}
+                Self {point, vector: directions, _orientation: PhantomData}
             }
 
             fn volatile(&self) -> Self {
@@ -529,7 +607,7 @@ macro_rules! impl_spatial_types_per_type {
                 self
             }
 
-            fn vector(&self) -> SpatialVectorNDof<$T> {
+            fn vector(&self) -> SpatialVectorNDof<$T, IsColl> {
                 SpatialVectorNDof::new_from_direction(self.vector.clone())
             }
 
@@ -569,10 +647,10 @@ macro_rules! impl_spatial_types_per_type {
             }
         }
 
-        impl SpatialVectorWithBaseNDofFunctions<$T> for SpatialVectorWithBasePointNDof<$T> {
-            fn new_with_base(base_point: &Vec<$T>, directions: &Vec<$T>) -> Self {
+        impl SpatialVectorWithBaseNDofFunctions<$T, IsColl> for SpatialVectorWithBasePointNDof<$T, IsColl> {
+            fn new_with_base(base_point: &Vec<$T>, directions: &Vec<$T>) -> SpatialVectorWithBasePointNDof<$T, IsColl> {
 
-                Self {point: base_point.clone(), vector: directions.clone()}
+                SpatialVectorWithBasePointNDof::<$T, IsColl> {point: base_point.clone(), vector: directions.clone(), _orientation: PhantomData::<IsColl>}
             }
 
             fn base_direction_from_difference(base_pos: &PosNDof<$T>, pos1: &PosNDof<$T>, pos2: &PosNDof<$T>) -> Self {
@@ -580,13 +658,13 @@ macro_rules! impl_spatial_types_per_type {
                     panic!("Differentiated points do not have equal number of DOF's!")
                 }
                 let directions = pos1.x.iter().zip(pos2.x.iter()).map(|(point_1_x, point_2_x)| point_2_x - point_1_x).collect();
-                SpatialVectorWithBasePointNDof {point: base_pos.x.clone(), vector: directions}
+                SpatialVectorWithBasePointNDof {point: base_pos.x.clone(), vector: directions, _orientation: PhantomData}
             }
 
             fn base_at_first_direction_from_difference(pos1: &PosNDof<$T>, pos2: &PosNDof<$T>) -> Self {
-                let vector_part = SpatialVectorNDof::from_difference(&pos1, &pos2);
+                let vector_part = SpatialVectorNDof::<$T, IsColl>::from_difference(&pos1, &pos2);
 
-                Self {point: pos1.x.clone(), vector: vector_part.vector}
+                Self {point: pos1.x.clone(), vector: vector_part.vector, _orientation: PhantomData}
             }
 
             fn base_point(&self) -> PosNDof<$T> {
@@ -635,7 +713,9 @@ pub trait MathFunctions<T:MatrixValues> {
     fn row_dot_collumn(row: &Row<T>, collumn: &Collumn<T>) -> T ;
     fn row_dot_matrix(row: &Row<T>, matrix: &Matrix<T>) -> Row<T>;
     fn collumn_dot_row(collumn: &Collumn<T>, row: &Row<T>) -> Matrix<T>;
+    fn collumn_dot_matrix(collumn: &Collumn<T>, matrix: &Matrix<T>) -> Matrix<T>;
     fn matrix_dot_collumn(matrix: &Matrix<T>, collumn: &Collumn<T>) -> Collumn<T> ;
+    fn matrix_dot_row(matrix: &Matrix<T>, row: &Row<T>)  -> Matrix<T> ;
     fn matrix_add_matrix(mut A_matrix: Matrix<T>, B_matrix:& Matrix<T>) -> Matrix<T> {todo!()}
     fn matrix_dot_matrix(A_matrix:& Matrix<T>, B_matrix:& Matrix<T>) -> Matrix<T> ;
     fn as_matrix(&self, size: usize) -> Matrix<T>;
@@ -726,6 +806,18 @@ macro_rules! impl_math_functions_per_type {
             Matrix {rows}
         }
 
+        fn collumn_dot_matrix(collumn: &Collumn<$T>, matrix: &Matrix<$T>) -> Matrix<$T> {
+            assert!(collumn.len() == matrix.width() && matrix.height() == 1, "collumn x matrix dimensions do not agree!");
+
+            let mut rows = Vec::<Row<$T>>::with_capacity(collumn.len());
+            for index_r in 0..collumn.len() {
+                let cells = (0..collumn.len()).map(|index_c| matrix[index_r][0] * collumn[index_c]).collect::<Vec<$T>>();
+                rows.push(Row{ cells })
+            }
+
+            Matrix {rows}
+        }
+
         fn matrix_dot_collumn(matrix: & Matrix<$T>, collumn: & Collumn<$T>) -> Collumn<$T> {
             if !(matrix.width() == collumn.n_rows()) {
                 panic!("Dimension of matrix width must match collumn height. Matrix has dimension [{}x{}], Collumn has [{}x1]", matrix.height(), matrix.width(), collumn.n_rows());
@@ -761,6 +853,17 @@ macro_rules! impl_math_functions_per_type {
             A_matrix
         }
 
+        fn matrix_dot_row(matrix: &Matrix<$T>, row: &Row<$T>) -> Matrix<$T> {
+            assert!(matrix.width() == 1, "Size of Matrix not suited for x row operation!");
+            let mut new_matrix = Matrix::new_with_constant_values(matrix.height(), 1, 0 as $T);
+            for i_r in 0..matrix.height() {
+                for i_c in 0..row.len() {
+                    new_matrix[i_r][i_c] = matrix[i_r][0] * row[i_c];
+                }
+            }
+            new_matrix
+        }
+
         fn matrix_dot_matrix(A_matrix:& Matrix<$T>, B_matrix:& Matrix<$T>) -> Matrix<$T> {
             // this function takes 2 references to the matrices to multiply, returns a new matrix.
             // As in place matrix multiplication is practically impossible, there should be the space for all 3 in memory.
@@ -783,11 +886,69 @@ macro_rules! impl_math_functions_per_type {
         }
 
         fn as_matrix(&self, size: usize) -> Matrix<$T> {
-            Matrix::new_square_with_constant_values(size,*self)
+            Matrix::new_square_eye(size,*self)
         }
     }
     };
 }
+
+macro_rules! constant_multipliers_per_type {
+    ($T: ident) => {
+        impl Mul<Row<$T>> for $T {
+            type Output = Row<$T>;
+
+            fn mul(self, mut rhs: Row<$T>) -> Self::Output {
+                rhs.multiply_all_elements_by(self);
+                rhs
+            }
+        }
+
+        impl Mul<SpatialVectorNDof<$T, IsRow>> for $T {
+            type Output = SpatialVectorNDof<$T, IsRow>;
+
+            fn mul(self, mut rhs: SpatialVectorNDof<$T, IsRow>) -> Self::Output {
+                rhs.scale(self);
+                rhs
+            }
+        }
+
+        impl Mul<Collumn<$T>> for $T {
+            type Output = Collumn<$T>;
+
+            fn mul(self, mut rhs: Collumn<$T>) -> Self::Output {
+                rhs.multiply_all_elements_by(self);
+                rhs
+            }
+        }
+
+        impl Mul<SpatialVectorNDof<$T, IsColl>> for $T {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn mul(self, mut rhs: SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                rhs.scale(self);
+                rhs
+            }
+        }
+
+        impl Mul<Matrix<$T>> for $T {
+            type Output = Matrix<$T>;
+
+            fn mul(self, mut rhs: Matrix<$T>) -> Self::Output {
+                rhs.multiply_all_elements_by(self);
+                rhs
+            }
+        }
+    }
+}
+
+
+constant_multipliers_per_type!(i8);
+constant_multipliers_per_type!(i16);
+constant_multipliers_per_type!(i32);
+constant_multipliers_per_type!(i64);
+
+constant_multipliers_per_type!(f32);
+constant_multipliers_per_type!(f64);
 
 impl_math_functions_per_type!(i8);
 impl_math_functions_per_type!(i16);
