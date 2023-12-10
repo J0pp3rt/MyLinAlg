@@ -938,6 +938,50 @@ macro_rules! constant_multipliers_per_type {
                 rhs
             }
         }
+
+        ////////////////////////////////////////////////////////
+        /// borrowed variants
+        /// //////////////////////////////////////////////////////
+
+        impl Mul<&Row<$T>> for $T {
+            type Output = Row<$T>;
+
+            fn mul(self, rhs: &Row<$T>) -> Self::Output {
+                self * rhs.clone()
+            }
+        }
+
+        impl Mul<&SpatialVectorNDof<$T, IsRow>> for $T {
+            type Output = SpatialVectorNDof<$T, IsRow>;
+
+            fn mul(self, rhs: &SpatialVectorNDof<$T, IsRow>) -> Self::Output {
+                self * rhs.clone()
+            }
+        }
+
+        impl Mul<&Collumn<$T>> for $T {
+            type Output = Collumn<$T>;
+
+            fn mul(self, rhs: &Collumn<$T>) -> Self::Output {
+                self * rhs.clone()
+            }
+        }
+
+        impl Mul<&SpatialVectorNDof<$T, IsColl>> for $T {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn mul(self, rhs: &SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                self * rhs.clone()
+            }
+        }
+
+        impl Mul<&Matrix<$T>> for $T {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &Matrix<$T>) -> Self::Output {
+                self * rhs.clone()
+            }
+        }
     }
 }
 

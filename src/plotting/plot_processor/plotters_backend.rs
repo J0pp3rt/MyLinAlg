@@ -1,17 +1,143 @@
 use crate::plotting::{*};
-
+use plotters::style::text_anchor::{HPos, Pos, VPos};
+use crate::full_palette::GREY;
+use plotters::chart::DualCoordChartContext;
 pub trait PlotProcessorPlottersBackendFunctions<T> {
 
-    fn SVG_to_file(&self, file_path: &str);
-    fn SVG_to_mem(&self) -> String;
-    fn SVG_to_RGBA(&self) -> Vec<u8>;
-    fn bitmap_to_rgb(&self) -> Vec<u8>;
+    fn SVG_to_file(&mut self, file_path: &str);
+    fn SVG_to_mem(&mut self) -> String;
+    fn SVG_to_RGBA(&mut self) -> Vec<u8>;
+    fn bitmap_to_rgb(&mut self) -> Vec<u8>;
+    fn bitmap_to_file(&mut self, file_path: &str);
 }
 pub trait PlotProcessorPlottersBackendFunctionsForAllThePlottersBackends<OutputType: plotters::prelude::DrawingBackend> {
     fn process(&self, root: &mut DrawingArea<OutputType, Shift>);
     fn simple_2d_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool);
     fn simple_3d_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool);
     fn heatmap_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool);
+    fn contour_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool);
+}
+
+macro_rules! make_std_chart {
+    ($self: expr, $chart: expr) => {
+        $chart
+            .x_label_area_size($self.plots.plotting_settings.plotters_x_label_area_size)
+            .y_label_area_size($self.plots.plotting_settings.plotters_y_label_area_size)
+            .top_x_label_area_size($self.plots.plotting_settings.plotters_x_top_label_area_size)
+            .right_y_label_area_size($self.plots.plotting_settings.plotters_right_y_label_area_size)
+            .margin($self.plots.plotting_settings.plotters_margin)
+            .caption({
+                match &$self.plots.title.is_empty() {
+                    false => {$self.plots.title.clone()}
+                    true => {$self.plots.plotting_settings.title.clone()}
+                }
+            }, TextStyle::from(("sans-serif", $self.plots.plotting_settings.title_font_size).into_font()).pos(Pos::new(HPos::Center, VPos::Top)))
+    }
+}
+
+macro_rules! make_std_axis {
+    ($axis: expr, $self: expr) => {
+
+
+        match $self.plots.plotting_settings.x_grid_major_subdevisions {
+            Option::Some(n_lines) => {
+                $axis.x_labels(n_lines);
+            },
+            _ => {} // default is to already show major gridlines
+        }
+
+        match $self.plots.plotting_settings.y_grid_major_subdevisions {
+            Option::Some(n_lines) => {
+                $axis.y_labels(n_lines);
+            },
+            _ => {} // default is to already show major gridlines
+        }
+
+        match $self.plots.plotting_settings.show_x_grid_minor {
+            true => {
+                match $self.plots.plotting_settings.x_grid_minor_subdevisions {
+                    Option::Some(n_lines) => {
+                        $axis.x_max_light_lines(n_lines);
+                    },
+                    _ => {} // default is to already show minor gridlines
+                }
+            },
+            false => {
+                $axis.x_max_light_lines(0);
+            }
+        }
+
+        match $self.plots.plotting_settings.show_y_grid_minor {
+            true => {
+                match $self.plots.plotting_settings.y_grid_minor_subdevisions {
+                    Option::Some(n_lines) => {
+                        $axis.y_max_light_lines(n_lines);
+                    },
+                    _ => {} // default is to already show minor gridlines
+                }
+            },
+            false => {
+                $axis.y_max_light_lines(0);
+            }
+        }
+
+        match $self.plots.plotting_settings.show_grid_major {
+            false => {
+                $axis.bold_line_style(ShapeStyle{
+                    color: WHITE.to_rgba(),
+                    filled: false,
+                    stroke_width: 0
+                });
+            },
+            true => {}
+        }
+
+        match $self.plots.plotting_settings.show_x_axis {
+            false => {
+                $axis.disable_x_axis();
+            },
+            _ => {}
+        }
+
+        match $self.plots.plotting_settings.show_y_axis {
+            false => {
+                $axis.disable_y_axis();
+            },
+            _ => {}
+        }
+
+        match $self.plots.plotting_settings.show_x_grid_minor {
+            false => {
+                $axis.disable_x_mesh();
+            },
+            _ => {}
+        }
+
+        match $self.plots.plotting_settings.show_y_grid_minor {
+            false => {
+                $axis.disable_y_mesh();
+            },
+            _ => {}
+        }
+
+        let mut grey = GREY.to_rgba();
+        grey.3 = grey.3 * 0.5;
+
+        $axis
+        .x_desc($self.plots.x_label.clone())
+        .y_desc($self.plots.y_label.clone())
+        .x_label_style({
+            TextStyle::from(("sans-serif", $self.plots.plotting_settings.label_font_size).into_font()).pos(Pos::new(HPos::Right, VPos::Top))
+        })
+        .y_label_style({
+            TextStyle::from(("sans-serif", $self.plots.plotting_settings.label_font_size).into_font()).pos(Pos::new(HPos::Right, VPos::Center))
+        })
+        .set_tick_mark_size(LabelAreaPosition::Bottom, $self.plots.plotting_settings.x_tick_mark_size)
+        .set_tick_mark_size(LabelAreaPosition::Left, $self.plots.plotting_settings.y_tick_mark_size)
+        .x_label_offset($self.plots.plotting_settings.x_label_offset)
+        .y_label_offset($self.plots.plotting_settings.y_label_offset)
+        .draw().unwrap();
+    };
 }
 
 macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoying_variants {
@@ -37,6 +163,18 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                     self.heatmap_plot(root, true);
                     self.simple_2d_plot(root, false)
                 },
+                SupportedPlotTypes::Contour => {
+                    self.contour_plot(root, true)
+                },
+                SupportedPlotTypes::ContourAndLines2d => {
+                    self.contour_plot(root, true);
+                    self.simple_2d_plot(root, false)
+                },
+                SupportedPlotTypes::HeatMapContourAndLines2d => {
+                    self.heatmap_plot(root, true);
+                    self.contour_plot(root, true);
+                    self.simple_2d_plot(root, false)
+                },
                 // _ => {panic!("This plot type is not supported by the PLOTTERS backend")}
             }
 
@@ -54,12 +192,6 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
 
         fn simple_2d_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool) {
 
-            let title_of_figure: String;
-            match &self.plots.title.is_empty() {
-                false => {title_of_figure = self.plots.title.clone()}
-                true => {title_of_figure = self.plots.plotting_settings.title.clone()}
-            }
-
             let range_x_f64 = self.plots.x_range.as_ref().unwrap().start as f64 .. self.plots.x_range.as_ref().unwrap().end as f64;
             let range_y_f64 = self.plots.y_range.as_ref().unwrap().start as f64 .. self.plots.y_range.as_ref().unwrap().end as f64;
             let range_y2_f64 = self.plots.y2_range.as_ref().unwrap().start as f64 .. self.plots.y2_range.as_ref().unwrap().end as f64;
@@ -71,12 +203,7 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
             let y2_axis_scaling = self.plots.y2_axis_scaling.clone().expect("y2 axis scaling should have been set!");
 
             let mut chart = ChartBuilder::on(&root);
-            chart
-                .x_label_area_size(self.plots.plotting_settings.plotters_x_label_area_size)
-                .y_label_area_size(self.plots.plotting_settings.plotters_y_label_area_size)
-                .right_y_label_area_size(self.plots.plotting_settings.plotters_right_y_label_area_size)
-                .margin(self.plots.plotting_settings.plotters_margin)
-                .caption(title_of_figure, ("sans-serif", 25.).into_font());
+            let mut chart = make_std_chart!(self, chart);
    
             // get ready for some an-idiometicness
             match (x_axis_scaling, y_axis_scaling, y2_axis_scaling) {
@@ -169,12 +296,6 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
 
         fn simple_3d_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool) {
 
-            let title_of_figure: String;
-            match &self.plots.title.is_empty() {
-                false => {title_of_figure = self.plots.title.clone()}
-                true => {title_of_figure = self.plots.plotting_settings.title.clone()}
-            }
-
             let range_x_f64 = self.plots.x_range.as_ref().unwrap().start as f64 .. self.plots.x_range.as_ref().unwrap().end as f64;
             let range_y_f64 = self.plots.y_range.as_ref().unwrap().start as f64 .. self.plots.y_range.as_ref().unwrap().end as f64;
             let range_z_f64 = self.plots.z_range.as_ref().unwrap().start as f64 .. self.plots.z_range.as_ref().unwrap().end as f64;
@@ -185,14 +306,9 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
             let z_axis_scaling = self.plots.z_axis_scaling.clone().expect("z axis scaling should have been set!");
 
             let mut chart = ChartBuilder::on(&root);
-            chart
-            .x_label_area_size(self.plots.plotting_settings.plotters_x_label_area_size)
-            .y_label_area_size(self.plots.plotting_settings.plotters_y_label_area_size)
-            .right_y_label_area_size(self.plots.plotting_settings.plotters_right_y_label_area_size)
-            .margin(self.plots.plotting_settings.plotters_margin)
-            .caption(title_of_figure, ("sans-serif", 25.).into_font());
+            let mut chart = make_std_chart!(self, chart);
 
-            // get ready for some an-idiometicness
+            // get ready for some an-idiometicness   
             match (x_axis_scaling, y_axis_scaling, z_axis_scaling) {
                 (PlotAxisScaling::Linear, PlotAxisScaling::Linear, PlotAxisScaling::Linear) => {
                     let mut chart = chart
@@ -248,12 +364,6 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
 
         fn heatmap_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool) {
 
-            let title_of_figure: String;
-            match &self.plots.title.is_empty() {
-                false => {title_of_figure = self.plots.title.clone()}
-                true => {title_of_figure = self.plots.plotting_settings.title.clone()}
-            }
-
             let range_x_f64 = self.plots.x_range.as_ref().unwrap().start as f64 .. self.plots.x_range.as_ref().unwrap().end as f64;
             let range_y_f64 = self.plots.y_range.as_ref().unwrap().start as f64 .. self.plots.y_range.as_ref().unwrap().end as f64;
             let range_y2_f64 = self.plots.y2_range.as_ref().unwrap().start as f64 .. self.plots.y2_range.as_ref().unwrap().end as f64;
@@ -265,12 +375,7 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
             let z_axis_scaling = self.plots.z_axis_scaling.clone().expect("z axis scaling should have been set!");
 
             let mut chart = ChartBuilder::on(&root);
-            chart
-            .x_label_area_size(self.plots.plotting_settings.plotters_x_label_area_size)
-            .y_label_area_size(self.plots.plotting_settings.plotters_y_label_area_size)
-            .right_y_label_area_size(self.plots.plotting_settings.plotters_right_y_label_area_size)
-            .margin(self.plots.plotting_settings.plotters_margin)
-            .caption(title_of_figure, ("sans-serif", 25.).into_font());
+            let mut chart = make_std_chart!(self, chart);
 
             match (x_axis_scaling, y_axis_scaling) {
                 (PlotAxisScaling::Linear, PlotAxisScaling::Linear) => {
@@ -281,94 +386,8 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
 
                     let mut axis = chart.configure_mesh(); // all of this is stolen from "produce_other_2d_plot_settings" maybe be smarter about this!
 
-                    match self.plots.plotting_settings.x_grid_major_subdevisions {
-                        Option::Some(n_lines) => {
-                            axis.x_labels(n_lines);
-                        },
-                        _ => {} // default is to already show major gridlines
-                    }
             
-                    match self.plots.plotting_settings.y_grid_major_subdevisions {
-                        Option::Some(n_lines) => {
-                            axis.y_labels(n_lines);
-                        },
-                        _ => {} // default is to already show major gridlines
-                    }
-            
-                    match self.plots.plotting_settings.show_x_grid_minor {
-                        true => {
-                            match self.plots.plotting_settings.x_grid_minor_subdevisions {
-                                Option::Some(n_lines) => {
-                                    axis.x_max_light_lines(n_lines);
-                                },
-                                _ => {} // default is to already show minor gridlines
-                            }
-                        },
-                        false => {
-                            axis.x_max_light_lines(0);
-                        }
-                    }
-            
-                    match self.plots.plotting_settings.show_y_grid_minor {
-                        true => {
-                            match self.plots.plotting_settings.y_grid_minor_subdevisions {
-                                Option::Some(n_lines) => {
-                                    axis.y_max_light_lines(n_lines);
-                                },
-                                _ => {} // default is to already show minor gridlines
-                            }
-                        },
-                        false => {
-                            axis.y_max_light_lines(0);
-                        }
-                    }
-            
-                    match self.plots.plotting_settings.show_x_grid_major {
-                        false => {
-                            // println!("Disabling major gridlines not supported yet...");
-                        },
-                        true => {}
-                    }
-            
-                    match self.plots.plotting_settings.show_y_grid_major {
-                        false => {
-                            // println!("Disabling major gridlines not supported yet...");
-                        },
-                        true => {}
-                    }
-            
-                    match self.plots.plotting_settings.show_x_axis {
-                        false => {
-                            axis.disable_x_axis();
-                        },
-                        _ => {}
-                    }
-            
-                    match self.plots.plotting_settings.show_y_axis {
-                        false => {
-                            axis.disable_y_axis();
-                        },
-                        _ => {}
-                    }
-            
-                    match self.plots.plotting_settings.show_x_mesh {
-                        false => {
-                            axis.disable_x_mesh();
-                        },
-                        _ => {}
-                    }
-            
-                    match self.plots.plotting_settings.show_y_mesh {
-                        false => {
-                            axis.disable_y_mesh();
-                        },
-                        _ => {}
-                    }
-            
-                    axis
-                        .x_desc(self.plots.x_label.clone())
-                        .y_desc(self.plots.y_label.clone())
-                        .draw().unwrap(); // do some more work on this
+                    make_std_axis!(axis, self);
 
                     match self.plots.y2_axis_scaling.as_ref().unwrap() {
                         PlotAxisScaling::NoAxis => {},
@@ -383,36 +402,239 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                         }
                     }
 
-                    let n_points_x = self.plots.surface_3d.as_ref().unwrap().x_values.len();
-                    let n_points_y = self.plots.surface_3d.as_ref().unwrap().y_values.len();
+                    macro_rules! draw_the_heatmap {
+                        ($plot: expr, $chart: expr, $x_values: expr, $y_values: expr, $z_values: expr) => {
+                            let n_points_x = $x_values.len();
+                            let n_points_y = $y_values.len();
+        
+                            let mut lowest_x = $x_values[0] as f64;
+                            let mut highest_x = $x_values[0] as f64;
+                            let x_values_converted = $x_values.iter().map(|x| {
+                                if (*x as f64) < lowest_x {lowest_x = *x as f64}; 
+                                if (*x as f64) > highest_x {highest_x = *x as f64};
+                                *x as f64
+                            }).collect::<Vec<f64>>();
+        
+                            let dx_per_node = (highest_x - lowest_x) as f64 / (n_points_x as f64);
+        
+                            let mut lowest_y = $y_values[0] as f64;
+                            let mut highest_y = $y_values[0] as f64;
+                            let y_values_converted = $y_values.iter().map(|y| {
+                                if (*y as f64) < lowest_y {lowest_y = *y as f64}; 
+                                if (*y as f64 )> highest_y {highest_y = *y as f64};
+                                *y as f64
+                            }).collect::<Vec<f64>>();
+        
+                            let dy_per_node = (highest_y - lowest_y) / (n_points_y as f64);
+                            
+                            let mut lowest_z = $z_values[0][0] as f64;
+                            let mut highest_z = $z_values[0][0] as f64;
+                            let z_values_for_iter = $z_values.clone();
+                            let _ = z_values_for_iter.iter().map(|z_row| {
+                                let mut row_lowest = z_row[0] as f64;
+                                let mut row_highest = z_row[0] as f64;
+                                let _ = z_row.iter().map( |z|{
+                                    if (*z as f64) < row_lowest {row_lowest = *z as f64}; 
+                                    if (*z as f64) > row_highest {row_highest = *z as f64};
+                                }).collect::<Vec<()>>();
+                                if (row_lowest as f64) < lowest_z {lowest_z = row_lowest as f64}; 
+                                if (row_highest as f64) > highest_z {highest_z = row_highest as f64};
+                            }).collect::<Vec<()>>();
 
-                    let x_low = self.plots.x_range.as_ref().unwrap().start as f64;
-                    let x_high = self.plots.x_range.as_ref().unwrap().end as f64;
+                            let color_map = $plot.surface_3d.clone().unwrap().color_map;
 
-                    let dx_per_node = (x_high - x_low) / (n_points_x as f64);
+                            chart.draw_series(
+                                y_values_converted.iter().enumerate().flat_map( |(y_index, _)|{
+                                    let z_row = (z_values_for_iter[y_index]).clone();
+                                    let colormap = $plot.surface_3d.clone().unwrap().color_map.clone();
+                                    x_values_converted.iter().enumerate().map( move |(x_index, _)|{
+                                        Rectangle::new(
+                                            [(dx_per_node*(x_index as f64)+lowest_x, dy_per_node*(y_index as f64)+lowest_y),(dx_per_node*(x_index as f64 + 1.)+lowest_y, dy_per_node*(y_index as f64 +1.)+lowest_y)],
+                                            ShapeStyle {
+                                                color: ColorMaps::get_color_from_map(vec![(((((z_row[x_index]).clone() as f32 - lowest_z as f32) / ((highest_z - lowest_z) as f32))).powf(1./3.))], colormap.clone()),
+                                                filled: true,
+                                                stroke_width: 0
+                                            }
+                                        )
+                                    })
+                                })
+                            ).unwrap();
+                        };
+                    }
 
-                    let y_low = self.plots.y_range.as_ref().unwrap().start as f64;
-                    let y_high = self.plots.y_range.as_ref().unwrap().end as f64;
+                    match (self.plots.surface_3d.as_ref().unwrap().x_values.clone(), self.plots.surface_3d.as_ref().unwrap().y_values.clone(), self.plots.surface_3d.as_ref().unwrap().z_values.clone(), self.plots.surface_3d.as_ref().unwrap().z_function.clone()) {
+                        (Option::Some(x_values), Option::Some(y_values),Option::Some(z_values), _) => {
+                            draw_the_heatmap!(self.plots, chart, x_values, y_values, z_values);
+                        },
+                        (_,_,_,Option::Some(z_function)) => {
+                            let x_values = f64::linspace(self.plots.x_range.clone().unwrap().start as f64, self.plots.x_range.clone().unwrap().end as f64, self.plots.plotting_settings.heatmap_n_points);
+                            let y_values = f64::linspace(self.plots.y_range.clone().unwrap().start as f64, self.plots.y_range.clone().unwrap().end as f64, self.plots.plotting_settings.heatmap_n_points);
+                            let z_values: Vec<Vec<f64>> = y_values.iter().map(|y| {
+                                x_values.iter().map(|x| {
+                                    (z_function)(vec![*x,*y])
+                                }).collect()
+                            }).collect();
+                            draw_the_heatmap!(self.plots, chart, x_values, y_values, z_values);
+                        },
+                        _ => {}
+                    }
 
-                    let dy_per_node = (y_high - y_low) / (n_points_y as f64);
 
-                    let z_low = self.plots.z_range.as_ref().unwrap().start;
-                    let z_high = self.plots.z_range.as_ref().unwrap().end;
 
-                    chart.draw_series(
-                        self.plots.surface_3d.as_ref().unwrap().x_values.iter().enumerate().flat_map( |(x_index, x)|{
-                            self.plots.surface_3d.as_ref().unwrap().y_values.iter().enumerate().map(move |(y_index, y)|{
-                                Rectangle::new(
-                                    [(dx_per_node*(x_index as f64)+x_low, dy_per_node*(y_index as f64)+y_low),(dx_per_node*(x_index as f64 + 1.)+x_low, dy_per_node*(y_index as f64 +1.)+y_low)],
-                                    ShapeStyle {
-                                        color: self.plots.plotting_settings.color_map.get_color((((self.plots.surface_3d.as_ref().unwrap().z_values[x_index][y_index] - z_low)/ (z_high - z_low)) as f32).powf(1./3.)),
-                                        filled: true,
-                                        stroke_width: 0
-                                    }
-                                )
-                            })
-                        })
-                    ).unwrap();
+                    // todo!(); // this one took 10 minutes to find
+                },
+                _ => {
+                    panic!("Only linear plot axis are supported in heat maps!")
+                },
+            }
+        }
+
+        fn contour_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool) {
+
+            let range_x_f64 = self.plots.x_range.as_ref().unwrap().start as f64 .. self.plots.x_range.as_ref().unwrap().end as f64;
+            let range_y_f64 = self.plots.y_range.as_ref().unwrap().start as f64 .. self.plots.y_range.as_ref().unwrap().end as f64;
+            let range_y2_f64 = self.plots.y2_range.as_ref().unwrap().start as f64 .. self.plots.y2_range.as_ref().unwrap().end as f64;
+            let range_z_f64 = self.plots.z_range.as_ref().unwrap().start as f64 .. self.plots.z_range.as_ref().unwrap().end as f64;
+
+            // using unwrap 
+            let x_axis_scaling = self.plots.x_axis_scaling.clone().expect("x axis scaling should have been set!");
+            let y_axis_scaling = self.plots.y_axis_scaling.clone().expect("y axis scaling should have been set!");
+            let z_axis_scaling = self.plots.z_axis_scaling.clone().expect("z axis scaling should have been set!");
+
+            let mut chart = ChartBuilder::on(&root);
+            let mut chart = make_std_chart!(self, chart);
+
+            match (x_axis_scaling, y_axis_scaling) {
+                (PlotAxisScaling::Linear, PlotAxisScaling::Linear) => {
+                    let mut chart = chart
+                        .build_cartesian_2d(range_x_f64.clone(), range_y_f64)
+                        .unwrap()
+                        .set_secondary_coord((range_x_f64).log_scale(), (range_y2_f64));
+
+                    let mut axis = chart.configure_mesh(); // all of this is stolen from "produce_other_2d_plot_settings" maybe be smarter about this!
+
+                    make_std_axis!(axis, self);
+
+                    match self.plots.y2_axis_scaling.as_ref().unwrap() {
+                        PlotAxisScaling::NoAxis => {},
+                        _ => {
+                            // process the settings for the secondary axis, maybe this can be made nicer
+                            let secondary_axis_label = self.plots.y2_label.clone();
+            
+                            chart
+                                .configure_secondary_axes()
+                                .y_desc(secondary_axis_label)
+                                .draw().unwrap();
+                        }
+                    }
+
+                    macro_rules! draw_the_contour_plot {
+                        ($plot: expr, $chart: expr, $x_values: expr, $y_values: expr, $z_values: expr) => {
+                            let n_points_x = $x_values.len();
+                            let n_points_y = $y_values.len();
+        
+                            let mut lowest_x = $x_values[0] as f64;
+                            let mut highest_x = $x_values[0] as f64;
+                            let x_values_converted = $x_values.iter().map(|x| {
+                                if (*x as f64) < lowest_x {lowest_x = *x as f64}; 
+                                if (*x as f64) > highest_x {highest_x = *x as f64};
+                                *x as f64
+                            }).collect::<Vec<f64>>();
+        
+                            let dx_per_node = (highest_x - lowest_x) as f64 / (n_points_x as f64);
+        
+                            let mut lowest_y = $y_values[0] as f64;
+                            let mut highest_y = $y_values[0] as f64;
+                            let y_values_converted = $y_values.iter().map(|y| {
+                                if (*y as f64) < lowest_y {lowest_y = *y as f64}; 
+                                if (*y as f64 )> highest_y {highest_y = *y as f64};
+                                *y as f64
+                            }).collect::<Vec<f64>>();
+        
+                            let dy_per_node = (highest_y - lowest_y) / (n_points_y as f64);
+                            
+                            let mut lowest_z = $z_values[0][0] as f64;
+                            let mut highest_z = $z_values[0][0] as f64;
+                            let z_values_for_iter = $z_values.clone();
+                            let _ = z_values_for_iter.iter().map(|z_row| {
+                                let mut row_lowest = z_row[0] as f64;
+                                let mut row_highest = z_row[0] as f64;
+                                let _ = z_row.iter().map( |z|{
+                                    if (*z as f64) < row_lowest {row_lowest = *z as f64}; 
+                                    if (*z as f64) > row_highest {row_highest = *z as f64};
+                                }).collect::<Vec<()>>();
+                                if (row_lowest as f64) < lowest_z {lowest_z = row_lowest as f64}; 
+                                if (row_highest as f64) > highest_z {highest_z = row_highest as f64};
+                            }).collect::<Vec<()>>();
+
+                            let division_factor = 1. / $plot.plotting_settings.contour_n_lines as f64;
+                            let band_size = $plot.plotting_settings.contour_band_width as f64 / $plot.plotting_settings.contour_n_lines as f64;
+
+                            let contour_alpha_factor: f64;
+                            if let Option::Some(factor) = $plot.contour.clone().unwrap().contour_alpha_factor {
+                                contour_alpha_factor = factor;
+                            } else {
+                                contour_alpha_factor = $plot.plotting_settings.contour_alpha_value;
+                            }
+
+                            chart.draw_series(
+                                y_values_converted
+                                    .iter()
+                                    .enumerate()
+                                    .flat_map( |(y_index, _)|{
+                                        let z_row = (z_values_for_iter[y_index]).clone();
+                                        let z_row_colorfilter = (z_values_for_iter[y_index]).clone();
+                                        let colormap = $plot.contour.clone().unwrap().color_map.clone();
+
+
+                                        x_values_converted
+                                            .iter()
+                                            .enumerate()
+                                            .filter(move |(x_index, _)| {
+                                                let normalized_value: f64 = (z_row_colorfilter[*x_index].clone() as f64 - lowest_z  ) / ((highest_z - lowest_z) );
+                                                if normalized_value % (division_factor as f64) < band_size && normalized_value > division_factor {
+                                                    true
+                                                } else {
+                                                    false
+                                                }
+                                            })
+                                            .map( move |(x_index, _)|{
+                                                Rectangle::new(
+                                                    [(dx_per_node*(x_index as f64)+lowest_x, dy_per_node*(y_index as f64)+lowest_y),(dx_per_node*(x_index as f64 + 1.)+lowest_y, dy_per_node*(y_index as f64 +1.)+lowest_y)],
+                                                    ShapeStyle {
+                                                        color: {
+                                                            let mut color = ColorMaps::get_color_from_map(vec![(((((z_row[x_index]).clone() as f32 - lowest_z as f32) / ((highest_z - lowest_z) as f32))))], colormap.clone());
+                                                            color.3 = color.3 * contour_alpha_factor;
+                                                            color
+                                                        },
+                                                        filled: true,
+                                                        stroke_width: 0
+                                                    }
+                                                )
+                                            })
+                                    })
+                            ).unwrap();
+                        };
+                    }
+
+                    match (self.plots.contour.as_ref().unwrap().x_values.clone(), self.plots.contour.as_ref().unwrap().y_values.clone(), self.plots.contour.as_ref().unwrap().z_values.clone(), self.plots.contour.as_ref().unwrap().z_function.clone()) {
+                        (Option::Some(x_values), Option::Some(y_values),Option::Some(z_values), _) => {
+                            draw_the_contour_plot!(self.plots, chart, x_values, y_values, z_values);
+                        },
+                        (_,_,_,Option::Some(z_function)) => {
+                            let x_values = f64::linspace(self.plots.x_range.clone().unwrap().start as f64, self.plots.x_range.clone().unwrap().end as f64, self.plots.plotting_settings.contour_n_points);
+                            let y_values = f64::linspace(self.plots.y_range.clone().unwrap().start as f64, self.plots.y_range.clone().unwrap().end as f64, self.plots.plotting_settings.contour_n_points);
+                            let z_values: Vec<Vec<f64>> = y_values.iter().map(|y| {
+                                x_values.iter().map(|x| {
+                                    (z_function)(vec![*x,*y])
+                                }).collect()
+                            }).collect();
+                            draw_the_contour_plot!(self.plots, chart, x_values, y_values, z_values);
+                        },
+                        _ => {}
+                    }
+
+
 
                     // todo!(); // this one took 10 minutes to find
                 },
@@ -424,12 +646,13 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
     }
 }}
 
-
 macro_rules! impl_plot_processor_plotters_backend_functions_per_type {
     ($T: ident) => {
         impl PlotProcessorPlottersBackendFunctions<$T> for PlotProcessor<$T, PlottersBackend> {
         
-            fn SVG_to_file(&self, file_path: &str) {
+            fn SVG_to_file(&mut self, file_path: &str) {
+                self.plots.plotting_settings.x_tick_mark_size = (self.plots.plotting_settings.x_tick_mark_size as f64 * 1.1) as i32;
+                self.plots.plotting_settings.y_tick_mark_size = (self.plots.plotting_settings.y_tick_mark_size as f64 * 1.5) as i32;
                 let (width, height) = self.plots.get_plot_dimensions();
 
                 let mut root = SVGBackend::new(file_path, (width, height)).into_drawing_area();
@@ -437,7 +660,8 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type {
                 self.process(&mut root);
             }
 
-            fn SVG_to_mem(&self) -> String {
+            fn SVG_to_mem(&mut self) -> String {
+                self.plots.plotting_settings.x_tick_mark_size = (self.plots.plotting_settings.x_tick_mark_size as f64 * 1.1) as i32;
                 let (width, height) = self.plots.get_plot_dimensions(); 
 
                 let mut string_buffer = String::new();
@@ -448,7 +672,8 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type {
                 string_buffer
             }
             
-            fn SVG_to_RGBA(&self) -> Vec<u8> {
+            fn SVG_to_RGBA(&mut self) -> Vec<u8> {
+                self.plots.plotting_settings.x_tick_mark_size = (self.plots.plotting_settings.x_tick_mark_size as f64 * 1.1) as i32;
                 // use plotters svg backend to render a svg image
                 // then use usvg to render svg to rgba
                 let start_svg = Instant::now();
@@ -467,7 +692,9 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type {
                 pixmap.take()
             }
 
-            fn bitmap_to_rgb(&self) -> Vec<u8> {
+            fn bitmap_to_rgb(&mut self) -> Vec<u8> {
+                self.plots.plotting_settings.x_tick_mark_size = (self.plots.plotting_settings.x_tick_mark_size as f64 * 0.5) as i32;
+                self.plots.plotting_settings.y_label_offset = (self.plots.plotting_settings.y_label_offset as f64 * 0.) as i32;
                 let (width, height) = self.plots.get_plot_dimensions(); 
 
                 let mut buffer = vec![0u8; (width*height*3) as usize];
@@ -480,6 +707,15 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type {
                 buffer
             }
 
+            fn bitmap_to_file(&mut self, file_path: &str) {
+                self.plots.plotting_settings.x_tick_mark_size = (self.plots.plotting_settings.x_tick_mark_size as f64 * 0.5) as i32;
+                self.plots.plotting_settings.y_label_offset = (self.plots.plotting_settings.y_label_offset as f64 *0.) as i32;
+                let (width, height) = self.plots.get_plot_dimensions();  
+                {
+                    let mut root = BitMapBackend::new(file_path, (width, height)).into_drawing_area();
+                    self.process(&mut root);
+                }
+            }
             
         }
     }
@@ -531,16 +767,13 @@ macro_rules! produce_other_2d_plot_settings {
             }
         }
 
-        match $self.plots.plotting_settings.show_x_grid_major {
+        match $self.plots.plotting_settings.show_grid_major {
             false => {
-                // println!("Disabling major gridlines not supported yet...");
-            },
-            true => {}
-        }
-
-        match $self.plots.plotting_settings.show_y_grid_major {
-            false => {
-                // println!("Disabling major gridlines not supported yet...");
+                axis.bold_line_style(ShapeStyle{
+                    color: WHITE.to_rgba(),
+                    filled: false,
+                    stroke_width: 0
+                });
             },
             true => {}
         }
@@ -559,25 +792,22 @@ macro_rules! produce_other_2d_plot_settings {
             _ => {}
         }
 
-        match $self.plots.plotting_settings.show_x_mesh {
+        match $self.plots.plotting_settings.show_x_grid_minor {
             false => {
                 axis.disable_x_mesh();
             },
             _ => {}
         }
 
-        match $self.plots.plotting_settings.show_y_mesh {
+        match $self.plots.plotting_settings.show_y_grid_minor {
             false => {
                 axis.disable_y_mesh();
             },
             _ => {}
         }
 
-        axis
-            .x_desc($self.plots.x_label.clone())
-            .y_desc($self.plots.y_label.clone())
-            .draw().unwrap(); // do some more work on this
-
+        make_std_axis!(axis, $self);
+        
         match $self.plots.y2_axis_scaling.as_ref().unwrap() {
             PlotAxisScaling::NoAxis => {},
             _ => {
@@ -649,11 +879,20 @@ macro_rules! produce_other_2d_plot_settings {
             let line_color: RGBAColor;
             if let Option::Some(color) = &series.color {
                 line_color = *color;
+            } else if let Option::Some(color_map) = &series.color_map {
+                let index_of_line: f32;
+
+                index_of_line = number as f32 / amount_of_lines as f32;
+                line_color = ColorMaps::get_color_from_map(vec![index_of_line, amount_of_lines as f32], color_map.clone())
             } else {
                 if let Option::Some(color) = $self.plots.plotting_settings.line_color {
                     line_color = color;
                 } else {
-                    line_color = $self.plots.plotting_settings.color_map.get_color(number as f32/ amount_of_lines as f32);
+                    let index_of_line: f32;
+
+                    index_of_line = number as f32 / amount_of_lines as f32;
+
+                    line_color = ColorMaps::get_color_from_map(vec![index_of_line, amount_of_lines as f32], $self.plots.plotting_settings.color_map_line.clone());
                 }
             }
             let style = ShapeStyle {color: line_color, filled: marker_fill, stroke_width: line_width};
@@ -728,19 +967,14 @@ macro_rules! produce_other_3d_plot_settings {
             }
         }
 
-        match $self.plots.plotting_settings.show_x_grid_major {
+        match $self.plots.plotting_settings.show_grid_major {
             false => {
-                // println!("Disabling major gridlines not supported yet...");
+                // probably not even possible to plot grid major in 3d?
+                // it is! but in different function! look at configure_axes()
             },
             true => {}
         }
 
-        match $self.plots.plotting_settings.show_y_grid_major {
-            false => {
-                // println!("Disabling major gridlines not supported yet...");
-            },
-            true => {}
-        }
 
         // match $self.plots.plotting_settings.show_x_axis {
         //     false => {
@@ -831,11 +1065,20 @@ macro_rules! produce_other_3d_plot_settings {
             let line_color: RGBAColor;
             if let Option::Some(color) = &series.color {
                 line_color = *color;
+            } else if let Option::Some(color_map) = &series.color_map {
+                let index_of_line: f32;
+
+                index_of_line = number as f32 / amount_of_lines as f32;
+                line_color = ColorMaps::get_color_from_map(vec![index_of_line, amount_of_lines as f32], color_map.clone())
             } else {
                 if let Option::Some(color) = $self.plots.plotting_settings.line_color {
                     line_color = color;
                 } else {
-                    line_color = $self.plots.plotting_settings.color_map.get_color(number as f32/ amount_of_lines as f32);
+                    let index_of_line: f32;
+
+                    index_of_line = number as f32 / amount_of_lines as f32;
+
+                    line_color = ColorMaps::get_color_from_map(vec![index_of_line, amount_of_lines as f32], $self.plots.plotting_settings.color_map_line.clone());
                 }
             }
 

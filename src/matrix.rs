@@ -715,10 +715,10 @@ macro_rules! impl_matrix_functions_for_type {
 
 macro_rules! impl_std_ops_matrix_per_type {
     ($T: ident) => {
-        impl Add for Matrix<$T> {
+        impl Add<Matrix<$T>> for Matrix<$T> {
             type Output = Matrix<$T>;
 
-            fn add(mut self, rhs: Self) -> Self::Output {
+            fn add(mut self, rhs: Matrix<$T>) -> Self::Output {
                 assert!(self.height() == rhs.height() && self.width() == rhs.width(), "Provided matrices do not match dimensions");
                 for i_r in 0 .. self.rows.len() {
                     for i_c in 0.. self.rows[0].cells.len() {
@@ -754,9 +754,9 @@ macro_rules! impl_std_ops_matrix_per_type {
         impl Mul<SpatialVectorNDof<$T, IsColl>> for Matrix<$T> {
             type Output = SpatialVectorNDof<$T, IsColl>;
 
-            fn mul(self, rhs: SpatialVectorNDof<$T, IsColl>) -> Self::Output {
-                let rhs = rhs.to_collumn();
-                let result_collumn = $T::matrix_dot_collumn(&self, &rhs);
+            fn mul(mut self, rhs: SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                let row = rhs.to_collumn();
+                let result_collumn = $T::matrix_dot_collumn(&self, &row);
                 SpatialVectorNDof { vector: result_collumn.cells, _orientation: PhantomData::<IsColl> }
             }
         }
@@ -764,7 +764,7 @@ macro_rules! impl_std_ops_matrix_per_type {
         impl Mul<Matrix<$T>> for Matrix<$T> {
             type Output = Matrix<$T>;
 
-            fn mul(self, rhs: Matrix<$T>) -> Self::Output {
+            fn mul(mut self, rhs: Matrix<$T>) -> Self::Output {
                 $T::matrix_dot_matrix(&self, &rhs)
             }
         }
@@ -772,7 +772,7 @@ macro_rules! impl_std_ops_matrix_per_type {
         impl Mul<Row<$T>> for Matrix<$T> {
             type Output = Matrix<$T>;
 
-            fn mul(self, rhs: Row<$T>) -> Self::Output {
+            fn mul(mut self, rhs: Row<$T>) -> Self::Output {
                 $T::matrix_dot_row(&self, &rhs)
             }
         }
@@ -780,9 +780,9 @@ macro_rules! impl_std_ops_matrix_per_type {
         impl Mul<SpatialVectorNDof<$T, IsRow>> for Matrix<$T> {
             type Output = Matrix<$T>;
 
-            fn mul(self, rhs: SpatialVectorNDof<$T, IsRow>) -> Self::Output {
-                let rhs = rhs.to_row();
-                $T::matrix_dot_row(&self, &rhs)
+            fn mul(mut self, rhs: SpatialVectorNDof<$T, IsRow>) -> Self::Output {
+                let row = rhs.clone().to_row();
+                $T::matrix_dot_row(&self, &row)
             }
         }
 
@@ -801,6 +801,254 @@ macro_rules! impl_std_ops_matrix_per_type {
             fn div(mut self, rhs: $T) -> Self::Output {
                 self.divide_all_elements_by(rhs);
                 self
+            }
+        }
+
+        /////////////////////////////////////////////
+        /// LEFT HAND SIDE BORROWED
+        /// ////////////////////////////////////////
+        
+        impl Add<Matrix<$T>> for &Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn add(self, mut rhs: Matrix<$T>) -> Self::Output {
+                assert!(self.height() == rhs.height() && self.width() == rhs.width(), "Provided matrices do not match dimensions");
+                for i_r in 0 .. self.rows.len() {
+                    for i_c in 0.. self.rows[0].cells.len() {
+                        rhs[i_r][i_c] += self[i_r][i_c];
+                    }
+                }
+                rhs
+            }
+        }
+
+        impl Sub<Matrix<$T>> for &Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn sub(self, mut rhs: Matrix<$T>) -> Self::Output {
+                assert!(self.height() == rhs.height() && self.width() == rhs.width(), "Provided matrices do not match dimensions");
+                for i_r in 0 .. self.rows.len() {
+                    for i_c in 0.. self.rows[0].cells.len() {
+                        rhs[i_r][i_c] = self[i_r][i_c] - rhs[i_r][i_c];
+                    }
+                }
+                rhs
+            }
+        }
+
+        impl Mul<Collumn<$T>> for &Matrix<$T> {
+            type Output = Collumn<$T>;
+
+            fn mul(self, rhs: Collumn<$T>) -> Self::Output {
+                $T::matrix_dot_collumn(&self, &rhs)
+            }
+        }
+
+        impl Mul<SpatialVectorNDof<$T, IsColl>> for &Matrix<$T> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn mul(self, rhs: SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                let row = rhs.to_collumn();
+                let result_collumn = $T::matrix_dot_collumn(&self, &row);
+                SpatialVectorNDof { vector: result_collumn.cells, _orientation: PhantomData::<IsColl> }
+            }
+        }
+
+        impl Mul<Matrix<$T>> for &Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: Matrix<$T>) -> Self::Output {
+                $T::matrix_dot_matrix(&self, &rhs)
+            }
+        }
+
+        impl Mul<Row<$T>> for &Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: Row<$T>) -> Self::Output {
+                $T::matrix_dot_row(&self, &rhs)
+            }
+        }
+
+        impl Mul<SpatialVectorNDof<$T, IsRow>> for &Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: SpatialVectorNDof<$T, IsRow>) -> Self::Output {
+                let row = rhs.clone().to_row();
+                $T::matrix_dot_row(&self, &row)
+            }
+        }
+
+        impl Mul<$T> for &Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: $T) -> Self::Output {
+                let mut new_matrix = self.clone();
+                new_matrix.multiply_all_elements_by(rhs);
+                new_matrix
+            }
+        }
+
+        impl Div<$T> for &Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn div(self, rhs: $T) -> Self::Output {
+                let mut new_matrix = self.clone();
+                new_matrix.divide_all_elements_by(rhs);
+                new_matrix
+            }
+        }
+
+        ////////////////////////////////////////////
+        /// right hand side borrowed
+        /// ///////////////////////////////////////
+        /// 
+        impl Add<&Matrix<$T>> for Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn add(mut self, rhs: &Matrix<$T>) -> Self::Output {
+                assert!(self.height() == rhs.height() && self.width() == rhs.width(), "Provided matrices do not match dimensions");
+                for i_r in 0 .. self.rows.len() {
+                    for i_c in 0.. self.rows[0].cells.len() {
+                        self[i_r][i_c] += rhs[i_r][i_c];
+                    }
+                }
+                self
+            }
+        }
+
+        impl Sub<&Matrix<$T>> for Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn sub(mut self, rhs: &Matrix<$T>) -> Self::Output {
+                assert!(self.height() == rhs.height() && self.width() == rhs.width(), "Provided matrices do not match dimensions");
+                for i_r in 0 .. self.rows.len() {
+                    for i_c in 0.. self.rows[0].cells.len() {
+                        self[i_r][i_c] += - rhs[i_r][i_c];
+                    }
+                }
+                self
+            }
+        }
+
+        impl Mul<&Collumn<$T>> for Matrix<$T> {
+            type Output = Collumn<$T>;
+
+            fn mul(self, rhs: &Collumn<$T>) -> Self::Output {
+                $T::matrix_dot_collumn(&self, &rhs)
+            }
+        }
+
+        impl Mul<&SpatialVectorNDof<$T, IsColl>> for Matrix<$T> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn mul(mut self, rhs: &SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                let row = rhs.clone().to_collumn();
+                let result_collumn = $T::matrix_dot_collumn(&self, &row);
+                SpatialVectorNDof { vector: result_collumn.cells, _orientation: PhantomData::<IsColl> }
+            }
+        }
+
+        impl Mul<&Matrix<$T>> for Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(mut self, rhs: &Matrix<$T>) -> Self::Output {
+                $T::matrix_dot_matrix(&self, &rhs)
+            }
+        }
+
+        impl Mul<&Row<$T>> for Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(mut self, rhs: &Row<$T>) -> Self::Output {
+                $T::matrix_dot_row(&self, &rhs)
+            }
+        }
+
+        impl Mul<&SpatialVectorNDof<$T, IsRow>> for Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(mut self, rhs: &SpatialVectorNDof<$T, IsRow>) -> Self::Output {
+                let row = rhs.clone().to_row();
+                $T::matrix_dot_row(&self, &row)
+            }
+        }
+
+        /////////////////////////////////////////////
+        /// all boroowed
+        /// ////////////////////////////////////////
+        /// 
+        
+        impl Add<&Matrix<$T>> for &Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn add(self, rhs: &Matrix<$T>) -> Self::Output {
+                assert!(self.height() == rhs.height() && self.width() == rhs.width(), "Provided matrices do not match dimensions");
+                let mut new_matrix = self.clone();
+                for i_r in 0 .. self.rows.len() {
+                    for i_c in 0.. self.rows[0].cells.len() {
+                        new_matrix[i_r][i_c] += rhs[i_r][i_c];
+                    }
+                }
+                new_matrix
+            }
+        }
+
+        impl Sub<&Matrix<$T>> for &Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn sub(self, rhs: &Matrix<$T>) -> Self::Output {
+                assert!(self.height() == rhs.height() && self.width() == rhs.width(), "Provided matrices do not match dimensions");
+                let mut new_matrix = self.clone();
+                for i_r in 0 .. self.rows.len() {
+                    for i_c in 0.. self.rows[0].cells.len() {
+                        new_matrix[i_r][i_c] += - rhs[i_r][i_c];
+                    }
+                }
+                new_matrix
+            }
+        }
+
+        impl Mul<&Collumn<$T>> for &Matrix<$T> {
+            type Output = Collumn<$T>;
+
+            fn mul(self, rhs: &Collumn<$T>) -> Self::Output {
+                $T::matrix_dot_collumn(&self, &rhs)
+            }
+        }
+
+        impl Mul<&SpatialVectorNDof<$T, IsColl>> for &Matrix<$T> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn mul(self, rhs: &SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                let row = rhs.clone().to_collumn();
+                let result_collumn = $T::matrix_dot_collumn(&self, &row);
+                SpatialVectorNDof { vector: result_collumn.cells, _orientation: PhantomData::<IsColl> }
+            }
+        }
+
+        impl Mul<&Matrix<$T>> for &Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &Matrix<$T>) -> Self::Output {
+                $T::matrix_dot_matrix(&self, &rhs)
+            }
+        }
+
+        impl Mul<&Row<$T>> for &Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &Row<$T>) -> Self::Output {
+                $T::matrix_dot_row(&self, &rhs)
+            }
+        }
+
+        impl Mul<&SpatialVectorNDof<$T, IsRow>> for &Matrix<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &SpatialVectorNDof<$T, IsRow>) -> Self::Output {
+                let row = rhs.clone().to_row();
+                $T::matrix_dot_row(&self, &row)
             }
         }
     };

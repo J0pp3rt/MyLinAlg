@@ -7,6 +7,7 @@ pub struct Line3d<T> {
     pub z_values: Vec<T>,
     pub name: String,
     pub color: Option<RGBAColor>,
+    pub color_map: Option<PlotBuilderColorMaps>,
     pub line_style: Option<LineStyle>,
     pub line_width: Option<u32>,
     pub marker_style: Option<MarkerStyle>,
@@ -17,6 +18,8 @@ pub trait Line3dFunctions<T> {
     fn new(x_values: &Vec<T>, y_values: &Vec<T>, z_values: &Vec<T>) -> Self;
     fn set_name(&mut self, title: &str) -> &mut Self;
     fn set_color(&mut self, color: RGBAColor) -> &mut Self;
+    fn set_color_from_color_map(&mut self, normalized_value: f32, color_map: PlotBuilderColorMaps) -> &mut Self;
+    fn set_color_map(&mut self, color_map: PlotBuilderColorMaps) -> &mut Self;
     fn set_line_style(&mut self, line_style: LineStyle) -> &mut Self;
     fn set_line_width(&mut self, line_width: u32) -> &mut Self;
     fn set_marker_style(&mut self, marker_style: MarkerStyle) -> &mut Self;
@@ -34,6 +37,7 @@ macro_rules! impl_3d_line_functions {
                     z_values: z_values.clone(),
                     name: String::new(),
                     color: Option::None,
+                    color_map: Option::None,
                     line_style: Option::None,
                     line_width: Option::None,
                     marker_style: Option::None,
@@ -48,6 +52,18 @@ macro_rules! impl_3d_line_functions {
 
             fn set_color(&mut self, color: RGBAColor) -> &mut Self {
                 self.color = Option::Some(color);
+                self
+            }
+
+            fn set_color_from_color_map(&mut self, normalized_value: f32, color_map: PlotBuilderColorMaps) -> &mut Self {
+                self.color = Option::Some(
+                    ColorMaps::get_color_from_map(vec![normalized_value], color_map)
+                );
+                self
+            }
+
+            fn set_color_map(&mut self, color_map: PlotBuilderColorMaps) -> &mut Self {
+                self.color_map = Option::Some(color_map);
                 self
             }
 

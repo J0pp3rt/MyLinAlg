@@ -180,9 +180,9 @@ impl eframe::App for InteractivePlot {
                 let margins_y = self.saved_plot.plotting_settings.plotters_margin * 2
                     + self.saved_plot.plotting_settings.plotters_x_label_area_size;
                 let relative_drag_x = mouse_delta.x as f64 * PLOT_RESOLUTION_FACTOR as f64
-                    / ((self.saved_plot.plot_width.unwrap() - margins_x) as f64);
+                    / ((self.saved_plot.plot_width.unwrap() as i32 - margins_x) as f64);
                 let relative_drag_y = mouse_delta.y as f64 * PLOT_RESOLUTION_FACTOR as f64 
-                    / ((self.saved_plot.plot_width.unwrap() - margins_y) as f64);
+                    / ((self.saved_plot.plot_width.unwrap() as i32 - margins_y) as f64);
 
                 let (x_range_low, x_range_high) = (self.x_range.start, self.x_range.end);
                 let (y_range_low, y_range_high) = (self.y_range.start, self.y_range.end);

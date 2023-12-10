@@ -5,7 +5,8 @@ use crate::plotting::{*};
 pub struct PlotBuilder<T> {
     pub lines_2d: Option<Vec<Line2d<T>>>,
     pub lines_3d: Option<Vec<Line3d<T>>>,
-    pub surface_3d: Option<Surface3d<T>>,
+    pub surface_3d: Option<Surface3d<T, SurfacePlot>>,
+    pub contour: Option<Surface3d<T, ContourPlot>>,
     pub plot_type: Option<SupportedPlotTypes>,
     pub plot_width: Option<u32>,
     pub plot_height: Option<u32>,
@@ -31,6 +32,9 @@ pub enum SupportedPlotTypes {
     Lines3d,
     HeatMap,
     HeatMapAndLines2d,
+    Contour,
+    ContourAndLines2d,
+    HeatMapContourAndLines2d,
 }
 
 pub trait PlotBuilderFunctions<T> {
@@ -52,6 +56,7 @@ pub trait PlotBuilderFunctions<T> {
     fn set_plot_width(&mut self, width: u32) -> &mut Self;
     fn set_plot_height(&mut self, height: u32) -> &mut Self;
     fn set_plot_size(&mut self, width: u32, height: u32) -> &mut Self;
+    fn scale_plot(&mut self, scale: f64) -> &mut Self;
     fn set_plot_type(&mut self, plot_type: SupportedPlotTypes) -> &mut Self;
     fn guarantee_2d_lines_initialized(&mut self) -> &mut Self;
     fn add_2d_line(&mut self, line_2d: &Line2d<T>) -> &mut Self;
@@ -60,8 +65,12 @@ pub trait PlotBuilderFunctions<T> {
     fn guarantee_3d_lines_initialized(&mut self) -> &mut Self;
     fn add_3d_line(&mut self, line_3d: &Line3d<T>) -> &mut Self;
     fn add_simple_3d_line(&mut self, x_data: &Vec<T>, y_data: &Vec<T>, z_data: &Vec<T>) -> &mut Self;
-    fn add_surface_3d(&mut self, surface_3d: Surface3d<T>) -> &mut Self;
+    fn add_surface_3d(&mut self, surface_3d: Surface3d<T, SurfacePlot>) -> &mut Self;
+    fn add_surface_plot_fn(&mut self, z_function: Rc<Box<dyn Fn(Vec<f64>) -> f64>>) -> &mut Self;
     fn add_surface_plot_xyz(&mut self, x_data: &Vec<T>, y_data: &Vec<T>, z_data: &Vec<Vec<T>>) -> &mut Self;
+    fn add_contour(&mut self, contour: Surface3d<T, ContourPlot>) -> &mut Self;
+    fn add_contour_plot_fn(&mut self, z_function: Rc<Box<dyn Fn(Vec<f64>) -> f64>>) -> &mut Self;
+    fn add_contour_plot_xyz(&mut self, x_data: &Vec<T>, y_data: &Vec<T>, z_data: &Vec<Vec<T>>) -> &mut Self;
     fn to_plot_processor_unitialized(self) -> PlotProcessor<T, NoPlotBackend>;
     fn to_plotters_processor(self) -> PlotProcessor<T, PlottersBackend>;
     fn to_plotpy_processor(self) -> PlotProcessor<T, PlotPyBackend>;
@@ -76,6 +85,7 @@ macro_rules! impl_combined_plots_functions_per_type {
                     lines_2d: Option::None,
                     lines_3d: Option::None,
                     surface_3d: Option::None,
+                    contour: Option::None,
                     plot_type: Option::None,
                     plot_width: Option::None,
                     plot_height: Option::None,
@@ -181,6 +191,35 @@ macro_rules! impl_combined_plots_functions_per_type {
                 self
             }
 
+            fn scale_plot(&mut self, scale: f64) -> &mut Self {
+                match (self.plot_width, self.plot_width) {
+                    (Option::Some(width),Option::Some(height)) => {
+                        self.plot_width = Option::Some((width as f64 * scale) as u32) ;
+                        self.plot_height = Option::Some((height as f64 * scale) as u32) ;
+                    },
+                    _ => {}
+                }
+                self.plotting_settings.plot_width = (self.plotting_settings.plot_width as f64 * scale) as u32;
+                self.plotting_settings.plot_height = (self.plotting_settings.plot_height as f64 * scale) as u32;
+                self.plotting_settings.line_width = (self.plotting_settings.line_width as f64 * scale) as u32;
+                self.plotting_settings.outer_figure_margins = (self.plotting_settings.outer_figure_margins as f64 * scale) as u32;
+                self.plotting_settings.title_font_size = (self.plotting_settings.title_font_size as f64 * scale) as u32;
+                self.plotting_settings.label_font_size = (self.plotting_settings.label_font_size as f64 * scale) as u32;
+                self.plotting_settings.x_label_offset = (self.plotting_settings.x_label_offset as f64 * scale) as i32;
+                self.plotting_settings.y_label_offset = (self.plotting_settings.y_label_offset as f64 * scale) as i32;
+                self.plotting_settings.x_tick_mark_size = (self.plotting_settings.x_tick_mark_size as f64 * scale) as i32;
+                self.plotting_settings.y_tick_mark_size = (self.plotting_settings.y_tick_mark_size as f64 * scale) as i32;
+
+                self.plotting_settings.plotters_x_label_area_size = (self.plotting_settings.plotters_x_label_area_size as f64 * scale) as i32;
+                self.plotting_settings.plotters_x_top_label_area_size = (self.plotting_settings.plotters_x_top_label_area_size as f64 * scale) as i32;
+                self.plotting_settings.plotters_y_label_area_size = (self.plotting_settings.plotters_y_label_area_size as f64 * scale) as i32;
+                self.plotting_settings.plotters_right_y_label_area_size = (self.plotting_settings.plotters_right_y_label_area_size as f64 * scale) as i32;
+                self.plotting_settings.plotters_margin = (self.plotting_settings.plotters_margin as f64 * scale) as i32;
+                self.plotting_settings.plotters_figure_padding = (self.plotting_settings.plotters_figure_padding as f64 * scale) as i32;
+
+                self
+            }
+
             fn set_plot_type(&mut self, plot_type: SupportedPlotTypes) -> &mut Self {
                 self.plot_type = Option::Some(plot_type);
                 self
@@ -236,15 +275,39 @@ macro_rules! impl_combined_plots_functions_per_type {
                 self
             }
 
-            fn add_surface_3d(&mut self, surface_3d: Surface3d<$T>) -> &mut Self {
+            fn add_surface_3d(&mut self, surface_3d: Surface3d<$T, SurfacePlot>) -> &mut Self {
                 self.surface_3d = Option::Some(surface_3d);
 
                 self
             }
 
-            fn add_surface_plot_xyz(&mut self, x_data: &Vec<$T>, y_data: &Vec<$T>, z_data: &Vec<Vec<$T>>) -> &mut Self {
-                let surface_plot = Surface3d::new(x_data, y_data, z_data);
+            fn add_surface_plot_fn(&mut self, z_function: Rc<Box<dyn Fn(Vec<f64>) -> f64>>) -> &mut Self {
+                let surface_plot = Surface3d::new_surface_fn(z_function);
                 self.add_surface_3d(surface_plot);
+                self
+            }
+
+            fn add_surface_plot_xyz(&mut self, x_data: &Vec<$T>, y_data: &Vec<$T>, z_data: &Vec<Vec<$T>>) -> &mut Self {
+                let surface_plot = Surface3d::new_surface_xyz(x_data, y_data, z_data);
+                self.add_surface_3d(surface_plot);
+                self
+            }
+
+            fn add_contour(&mut self, contour: Surface3d<$T, ContourPlot>) -> &mut Self {
+                self.contour = Option::Some(contour);
+
+                self
+            }
+
+            fn add_contour_plot_fn(&mut self, z_function: Rc<Box<dyn Fn(Vec<f64>) -> f64>>) -> &mut Self {
+                let contour_plot = Surface3d::new_contour_fn(z_function);
+                self.add_contour(contour_plot);
+                self
+            }
+
+            fn add_contour_plot_xyz(&mut self, x_data: &Vec<$T>, y_data: &Vec<$T>, z_data: &Vec<Vec<$T>>) -> &mut Self {
+                let contour_plot = Surface3d::new_contour_xyz(x_data, y_data, z_data);
+                self.add_contour(contour_plot);
                 self
             }
 
@@ -385,35 +448,80 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                     }
                 } 
                 if let Option::Some(surface_3d) = &self.surface_3d { 
-                    found_any_on_z = true;
-                        for x_value in &surface_3d.x_values {
-                            if *x_value < x_min {
-                                x_min = *x_value
-                            }
-                            if *x_value > x_max {
-                                x_max = *x_value
-                            }
-                        }
-
-                        for y_value in &surface_3d.y_values {
-                            if *y_value < y_min {
-                                y_min = *y_value
-                            }
-                            if *y_value > y_max {
-                                y_max = *y_value
-                            }
-                        }
-
-                        for z_value_row in &surface_3d.z_values {
-                            for z_value in z_value_row {
-                                if *z_value < z_min {
-                                    z_min = *z_value
+                    match (&surface_3d.x_values, &surface_3d.y_values, &surface_3d.z_values){
+                    (Option::Some(x_values), Option::Some(y_values), Option::Some(z_values)) => {
+                        found_any_on_z = true;
+                            for x_value in x_values.iter() {
+                                if *x_value < x_min {
+                                    x_min = *x_value
                                 }
-                                if *z_value > z_max {
-                                    z_max = *z_value
+                                if *x_value > x_max {
+                                    x_max = *x_value
                                 }
                             }
-                        }
+
+                            for y_value in y_values.iter() {
+                                if *y_value < y_min {
+                                    y_min = *y_value
+                                }
+                                if *y_value > y_max {
+                                    y_max = *y_value
+                                }
+                            }
+
+                            for z_value_row in z_values.iter() {
+                                for z_value in z_value_row {
+                                    if *z_value < z_min {
+                                        z_min = *z_value
+                                    }
+                                    if *z_value > z_max {
+                                        z_max = *z_value
+                                    }
+                                }
+                            }
+                        },
+                        _ => {}
+
+                    }
+
+                } 
+                if let Option::Some(contour) = &self.contour { 
+                    match (&contour.x_values, &contour.y_values, &contour.z_values){
+                    (Option::Some(x_values), Option::Some(y_values), Option::Some(z_values)) => {
+                        found_any_on_z = true;
+                            for x_value in x_values.iter() {
+                                if *x_value < x_min {
+                                    x_min = *x_value
+                                }
+                                if *x_value > x_max {
+                                    x_max = *x_value
+                                }
+                            }
+
+                            for y_value in y_values.iter() {
+                                if *y_value < y_min {
+                                    y_min = *y_value
+                                }
+                                if *y_value > y_max {
+                                    y_max = *y_value
+                                }
+                            }
+
+                            for z_value_row in z_values.iter() {
+                                for z_value in z_value_row {
+                                    if *z_value < z_min {
+                                        z_min = *z_value
+                                    }
+                                    if *z_value > z_max {
+                                        z_max = *z_value
+                                    }
+                                }
+                            }
+                        },
+                        _ => {}
+
+                    }
+
                 } 
 
                 
@@ -670,7 +778,14 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                         },
                         SupportedPlotTypes::HeatMap => {
                             if let Option::None = self.surface_3d {
-                                panic!("No 3d lines initialized, can not make 3d line plot")
+                                panic!("No surface initialized, can not make surface plot")
+                            } else {
+                                SupportedPlotTypes::HeatMap
+                            }
+                        },
+                        SupportedPlotTypes::Contour => {
+                            if let Option::None = self.surface_3d {
+                                panic!("No contour plot initialized, can not make contour plot")
                             } else {
                                 SupportedPlotTypes::HeatMap
                             }
@@ -690,9 +805,55 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                             }
 
                             if (surface3d_detected || lines2d_detected).not() {
-                                panic!("No 3d lines initialized, can not make 3d line plot")
+                                panic!("No surface initialized, can not make heatmap / line plot")
                             } else {
                                 SupportedPlotTypes::HeatMapAndLines2d
+                            }
+                        },
+                        SupportedPlotTypes::ContourAndLines2d => {
+                            let contour_detected: bool;
+                            let lines2d_detected: bool;
+                            if let Option::None = self.contour {
+                                contour_detected = false;
+                            } else {
+                                contour_detected = true;
+                            }
+                            if let Option::None = self.lines_2d {
+                                lines2d_detected = false;
+                            } else {
+                                lines2d_detected = true;
+                            }
+
+                            if (contour_detected || lines2d_detected).not() {
+                                panic!("No contour initialized, can not make contour / line line plot")
+                            } else {
+                                SupportedPlotTypes::ContourAndLines2d
+                            }
+                        },
+                        SupportedPlotTypes::HeatMapContourAndLines2d => {
+                            let surface3d_detected: bool;
+                            let contour_detected: bool;
+                            let lines2d_detected: bool;
+                            if let Option::None = self.surface_3d {
+                                surface3d_detected = false;
+                            } else {
+                                surface3d_detected = true;
+                            }
+                            if let Option::None = self.contour {
+                                contour_detected = false;
+                            } else {
+                                contour_detected = true;
+                            }
+                            if let Option::None = self.lines_2d {
+                                lines2d_detected = false;
+                            } else {
+                                lines2d_detected = true;
+                            }
+
+                            if (surface3d_detected || contour_detected || lines2d_detected).not() {
+                                panic!("No contour initialized, can not make contour / line line plot")
+                            } else {
+                                SupportedPlotTypes::ContourAndLines2d
                             }
                         }
                         }
@@ -719,29 +880,45 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                     } else {
                         plot_surface_3d_included = false;
                     }
+                    let plot_contour_included: bool;
+                    if let Some(_) = self.contour {
+                        plot_contour_included = true;
+                    } else {
+                        plot_contour_included = false;
+                    }
+
 
                     // match the supported combinations
-                    match (plot_2d_line_included, plot_3d_line_included, plot_surface_3d_included) {
-                        (true, false, false) => {                       
+                    match (plot_2d_line_included, plot_3d_line_included, plot_surface_3d_included,plot_contour_included) {
+                        (true, false, false, false) => {                       
                             SupportedPlotTypes::Lines2d
                         },
-                        (false, true, false) => {
+                        (false, true, false, false) => {
                             SupportedPlotTypes::Lines3d
                         }
-                        (false, false, true) => {
+                        (false, false, true, false) => {
                             SupportedPlotTypes::HeatMap
                         }
-                        (true, false, true) => {
+                        (true, false, true, false) => {
                             SupportedPlotTypes::HeatMapAndLines2d
                         }
-                        (true, true, false) => { // AKA all other options, meant to be _ => { but left as example
-                            println!("Found combination of plots: plot_2d_line = {}, plot_3d_line = {}", plot_2d_line_included, plot_3d_line_included);
-                            panic!("This combination of plots is not supported!");
-                        }, 
-                        (false, false, false) => { // AKA all other options, meant to be _ => { but left as example
-                            println!("Found combination of plots: plot_2d_line = {}, plot_3d_line = {}", plot_2d_line_included, plot_3d_line_included);
-                            panic!("This combination of plots is not supported!");
-                        }, 
+                        (false, false, false, true) => {
+                            SupportedPlotTypes::Contour
+                        }
+                        (true, false, false, true) => {
+                            SupportedPlotTypes::ContourAndLines2d
+                        }
+                        (true, false, true, true) => {
+                            SupportedPlotTypes::HeatMapContourAndLines2d
+                        }
+                        // (true, true, false, false) => { // AKA all other options, meant to be _ => { but left as example
+                        //     println!("Found combination of plots: plot_2d_line = {}, plot_3d_line = {}", plot_2d_line_included, plot_3d_line_included);
+                        //     panic!("This combination of plots is not supported!");
+                        // }, 
+                        // (false, false, false) => { // AKA all other options, meant to be _ => { but left as example
+                        //     println!("Found combination of plots: plot_2d_line = {}, plot_3d_line = {}", plot_2d_line_included, plot_3d_line_included);
+                        //     panic!("This combination of plots is not supported!");
+                        // }, 
                         _ => {panic!("This combination of plots is not supported!")}
                     }
                 }

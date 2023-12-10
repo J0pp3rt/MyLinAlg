@@ -45,42 +45,42 @@ macro_rules! impl_std_ops_coll_per_type {
         impl Add<Collumn<$T>> for Collumn<$T> {
             type Output = Collumn<$T>;
 
-            fn add(self, rhs: Collumn<$T>) -> Self::Output {
+            fn add(mut self, rhs: Collumn<$T>) -> Self::Output {
                 assert!(self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
-                let cells = self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
-                Collumn { cells }
+                self.cells = self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                self
             }
         }
 
         impl Add<SpatialVectorNDof<$T, IsColl>> for Collumn<$T> {
-            type Output = Collumn<$T>;
+            type Output = SpatialVectorNDof<$T, IsColl>;
 
-            fn add(self, rhs: SpatialVectorNDof<$T, IsColl>) -> Self::Output {
-                let rhs = rhs.to_collumn();
-                assert!(self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
-                let cells = self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
-                Collumn { cells }
+            fn add(mut self, rhs: SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                let new_collumn = rhs.to_collumn();
+                assert!(self.cells.len() == new_collumn.cells.len(), "Provided Colls are not of same length");
+                self.cells = self.cells.iter().zip(new_collumn.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof { vector: new_collumn.cells, _orientation: PhantomData }
             }
         }
 
         impl Sub<Collumn<$T>> for Collumn<$T> {
             type Output = Collumn<$T>;
 
-            fn sub(self, rhs: Collumn<$T>) -> Self::Output {
+            fn sub(mut self, rhs: Collumn<$T>) -> Self::Output {
                 assert!(self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
-                let cells = self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
-                Collumn { cells }
+                self.cells = self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                self
             }
         }
 
         impl Sub<SpatialVectorNDof<$T, IsColl>> for Collumn<$T> {
-            type Output = Collumn<$T>;
+            type Output = SpatialVectorNDof<$T, IsColl>;
 
-            fn sub(self, rhs: SpatialVectorNDof<$T, IsColl>) -> Self::Output {
-                let rhs = rhs.to_collumn();
-                assert!(self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
-                let cells = self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
-                Collumn { cells }
+            fn sub(mut self, rhs: SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                let new_collumn = rhs.to_collumn();
+                assert!(self.cells.len() == new_collumn.cells.len(), "Provided Colls are not of same length");
+                self.cells = self.cells.iter().zip(new_collumn.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof { vector: new_collumn.cells, _orientation: PhantomData }
             }
         }
 
@@ -112,18 +112,230 @@ macro_rules! impl_std_ops_coll_per_type {
         impl Mul<$T> for Collumn<$T> {
             type Output = Collumn<$T>;
 
-            fn mul(mut self, rhs: $T) -> Self::Output {
-                self.multiply_all_elements_by(rhs);
-                self
+            fn mul(self, rhs: $T) -> Self::Output {
+                let mut new_collumn = self.clone();
+                new_collumn.multiply_all_elements_by(rhs);
+                new_collumn
             }
         }
 
         impl Div<$T> for Collumn<$T> {
             type Output = Collumn<$T>;
 
-            fn div(mut self, rhs: $T) -> Self::Output {
-                self.divide_all_elements_by(rhs);
+            fn div(self, rhs: $T) -> Self::Output {
+                let mut new_collumn = self.clone();
+                new_collumn.divide_all_elements_by(rhs);
+                new_collumn
+            }
+        }
+
+        // lhs borrowed
+
+        impl Add<Collumn<$T>> for &Collumn<$T> {
+            type Output = Collumn<$T>;
+
+            fn add(self, mut rhs: Collumn<$T>) -> Self::Output {
+                assert!(self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
+                rhs.cells = self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                rhs
+            }
+        }
+
+        impl Add<SpatialVectorNDof<$T, IsColl>> for &Collumn<$T> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn add(self, rhs: SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                let mut new_collumn = rhs.to_collumn();
+                assert!(self.cells.len() == new_collumn.cells.len(), "Provided Colls are not of same length");
+                new_collumn.cells = self.cells.iter().zip(new_collumn.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof { vector: new_collumn.cells, _orientation: PhantomData }
+            }
+        }
+
+        impl Sub<Collumn<$T>> for &Collumn<$T> {
+            type Output = Collumn<$T>;
+
+            fn sub(self, mut rhs: Collumn<$T>) -> Self::Output {
+                assert!(self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
+                rhs.cells = self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                rhs
+            }
+        }
+
+        impl Sub<SpatialVectorNDof<$T, IsColl>> for &Collumn<$T> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn sub(self, rhs: SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                let mut new_collumn = rhs.to_collumn();
+                assert!(self.cells.len() == new_collumn.cells.len(), "Provided Colls are not of same length");
+                new_collumn.cells = self.cells.iter().zip(new_collumn.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof { vector: new_collumn.cells, _orientation: PhantomData }
+            }
+        }
+
+        impl Mul<Row<$T>> for &Collumn<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: Row<$T>) -> Self::Output {
+                $T::collumn_dot_row(&self, &rhs)
+            }
+        }
+
+        impl Mul<SpatialVectorNDof<$T, IsRow>> for &Collumn<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: SpatialVectorNDof<$T, IsRow>) -> Self::Output {
+                let rhs = rhs.to_row();
+                $T::collumn_dot_row(&self, &rhs)
+            }
+        }
+
+        impl Mul<Matrix<$T>> for &Collumn<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: Matrix<$T>) -> Self::Output {
+                $T::collumn_dot_matrix(&self, &rhs)
+            }
+        }
+
+        // rhs borrowed
+
+        impl Add<&Collumn<$T>> for Collumn<$T> {
+            type Output = Collumn<$T>;
+
+            fn add(mut self, rhs: &Collumn<$T>) -> Self::Output {
+                assert!(self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
+                self.cells = self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
                 self
+            }
+        }
+
+        impl Add<&SpatialVectorNDof<$T, IsColl>> for Collumn<$T> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn add(mut self, rhs: &SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                assert!(self.cells.len() == rhs.vector.len(), "Provided Colls are not of same length");
+                self.cells = self.cells.iter().zip(rhs.vector.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof { vector: self.cells, _orientation: PhantomData }
+            }
+        }
+
+        impl Sub<&Collumn<$T>> for Collumn<$T> {
+            type Output = Collumn<$T>;
+
+            fn sub(mut self, rhs: &Collumn<$T>) -> Self::Output {
+                assert!(self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
+                self.cells = self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                self
+            }
+        }
+
+        impl Sub<&SpatialVectorNDof<$T, IsColl>> for Collumn<$T> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn sub(mut self, rhs: &SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                assert!(self.cells.len() == rhs.vector.len(), "Provided Colls are not of same length");
+                self.cells = self.cells.iter().zip(rhs.vector.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof { vector: self.cells, _orientation: PhantomData }
+            }
+        }
+
+        impl Mul<&Row<$T>> for Collumn<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &Row<$T>) -> Self::Output {
+                $T::collumn_dot_row(&self, &rhs)
+            }
+        }
+
+        impl Mul<&SpatialVectorNDof<$T, IsRow>> for Collumn<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &SpatialVectorNDof<$T, IsRow>) -> Self::Output {
+                let rhs = rhs.clone().to_row();
+                $T::collumn_dot_row(&self, &rhs)
+            }
+        }
+
+        impl Mul<&Matrix<$T>> for Collumn<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &Matrix<$T>) -> Self::Output {
+                $T::collumn_dot_matrix(&self, &rhs)
+            }
+        }
+
+        // All values borrowed
+
+        impl Add<&Collumn<$T>> for &Collumn<$T> {
+            type Output = Collumn<$T>;
+
+            fn add(self, rhs: &Collumn<$T>) -> Self::Output {
+                self.clone() + rhs
+            }
+        }
+
+        impl Add<&SpatialVectorNDof<$T, IsColl>> for &Collumn<$T> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn add(self, rhs: &SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                self.clone() + rhs
+            }
+        }
+
+        impl Sub<&Collumn<$T>> for &Collumn<$T> {
+            type Output = Collumn<$T>;
+
+            fn sub(self, rhs: &Collumn<$T>) -> Self::Output {
+                self.clone() - rhs
+            }
+        }
+
+        impl Sub<&SpatialVectorNDof<$T, IsColl>> for &Collumn<$T> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn sub(self, rhs: &SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                self.clone() - rhs
+            }
+        }
+
+        impl Mul<&Row<$T>> for &Collumn<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &Row<$T>) -> Self::Output {
+                self.clone() * rhs
+            }
+        }
+
+        impl Mul<&SpatialVectorNDof<$T, IsRow>> for &Collumn<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &SpatialVectorNDof<$T, IsRow>) -> Self::Output {
+                self.clone() * rhs
+            }
+        }
+
+        impl Mul<&Matrix<$T>> for &Collumn<$T> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &Matrix<$T>) -> Self::Output {
+                self.clone() * rhs
+            }
+        }
+
+        impl Mul<$T> for &Collumn<$T> {
+            type Output = Collumn<$T>;
+
+            fn mul(self, rhs: $T) -> Self::Output {
+                self.clone() * rhs
+            }
+        }
+
+        impl Div<$T> for &Collumn<$T> {
+            type Output = Collumn<$T>;
+
+            fn div(self, rhs: $T) -> Self::Output {
+                self.clone() / rhs
             }
         }
     }
@@ -131,14 +343,15 @@ macro_rules! impl_std_ops_coll_per_type {
 
 macro_rules! impl_std_ops_vec_coll_per_type {
     ($T: ident) => {
+
         impl Add<Collumn<$T>> for SpatialVectorNDof<$T, IsColl> {
             type Output = SpatialVectorNDof<$T, IsColl>;
 
             fn add(self, rhs: Collumn<$T>) -> Self::Output {
                 let mut converted_self = self.to_collumn();
                 assert!(converted_self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
-                let cells = converted_self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
-                SpatialVectorNDof {vector: cells, _orientation: PhantomData::<IsColl>}
+                converted_self.cells = converted_self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof {vector: converted_self.cells, _orientation: PhantomData::<IsColl>}
             }
         }
 
@@ -149,8 +362,8 @@ macro_rules! impl_std_ops_vec_coll_per_type {
                 let mut converted_self = self.to_collumn();
                 let rhs = rhs.to_collumn();
                 assert!(converted_self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
-                let cells = converted_self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
-                SpatialVectorNDof {vector: cells, _orientation: PhantomData::<IsColl>}
+                converted_self.cells = converted_self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof {vector: converted_self.cells, _orientation: PhantomData::<IsColl>}
             }
         }
 
@@ -160,8 +373,8 @@ macro_rules! impl_std_ops_vec_coll_per_type {
             fn sub(self, rhs: Collumn<$T>) -> Self::Output {
                 let mut converted_self = self.to_collumn();
                 assert!(converted_self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
-                let cells = converted_self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l - x_r).collect::<Vec<$T>>();
-                SpatialVectorNDof {vector: cells, _orientation: PhantomData::<IsColl>}
+                converted_self.cells = converted_self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l - x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof {vector: converted_self.cells, _orientation: PhantomData::<IsColl>}
             }
         }
 
@@ -172,8 +385,8 @@ macro_rules! impl_std_ops_vec_coll_per_type {
                 let mut converted_self = self.to_collumn();
                 let rhs = rhs.to_collumn();
                 assert!(converted_self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
-                let cells = converted_self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l - x_r).collect::<Vec<$T>>();
-                SpatialVectorNDof {vector: cells, _orientation: PhantomData::<IsColl>}
+                converted_self.cells = converted_self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l - x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof {vector: converted_self.cells, _orientation: PhantomData::<IsColl>}
             }
         }
 
@@ -181,7 +394,7 @@ macro_rules! impl_std_ops_vec_coll_per_type {
             type Output = Matrix<$T>;
 
             fn mul(self, rhs: Row<$T>) -> Self::Output {
-                let mut converted_self = self.to_collumn();
+                let converted_self = self.to_collumn();
                 $T::collumn_dot_row(&converted_self, &rhs)
             }
         }
@@ -190,7 +403,7 @@ macro_rules! impl_std_ops_vec_coll_per_type {
             type Output = Matrix<$T>;
 
             fn mul(self, rhs: SpatialVectorNDof<$T, IsRow>) -> Self::Output {
-                let mut converted_self = self.to_collumn();
+                let converted_self = self.to_collumn();
                 let rhs = rhs.to_row();
                 $T::collumn_dot_row(&converted_self, &rhs)
             }
@@ -200,7 +413,7 @@ macro_rules! impl_std_ops_vec_coll_per_type {
             type Output = Matrix<$T>;
 
             fn mul(self, rhs: Matrix<$T>) -> Self::Output {
-                let mut converted_self = self.to_collumn();
+                let converted_self = self.to_collumn();
                 $T::collumn_dot_matrix(&converted_self, &rhs)
             }
         }
@@ -208,7 +421,7 @@ macro_rules! impl_std_ops_vec_coll_per_type {
         impl Mul<$T> for SpatialVectorNDof<$T, IsColl> {
             type Output = SpatialVectorNDof<$T, IsColl>;
 
-            fn mul(mut self, rhs: $T) -> Self::Output {
+            fn mul(self, rhs: $T) -> Self::Output {
                 let mut converted_self = self.to_collumn();
                 converted_self.multiply_all_elements_by(rhs);
                 SpatialVectorNDof {vector: converted_self.cells, _orientation: PhantomData::<IsColl>}
@@ -218,10 +431,240 @@ macro_rules! impl_std_ops_vec_coll_per_type {
         impl Div<$T> for SpatialVectorNDof<$T, IsColl> {
             type Output = SpatialVectorNDof<$T, IsColl>;
 
-            fn div(mut self, rhs: $T) -> Self::Output {
+            fn div(self, rhs: $T) -> Self::Output {
                 let mut converted_self = self.to_collumn();
                 converted_self.divide_all_elements_by(rhs);
                 SpatialVectorNDof {vector: converted_self.cells, _orientation: PhantomData::<IsColl>}
+            }
+        }
+
+        /////////////////////////////////////////
+        /// Left hand side borrowed
+        /// /////////////////////////////////////
+
+        impl Add<Collumn<$T>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn add(self, mut rhs: Collumn<$T>) -> Self::Output {
+                assert!(self.vector.len() == rhs.cells.len(), "Provided Colls are not of same length");
+                rhs.cells = self.vector.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof {vector: rhs.cells, _orientation: PhantomData::<IsColl>}
+            }
+        }
+
+        impl Add<SpatialVectorNDof<$T, IsColl>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn add(self, rhs: SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                let mut rhs = rhs.to_collumn();
+                assert!(self.vector.len() == rhs.cells.len(), "Provided Colls are not of same length");
+                rhs.cells = self.vector.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof {vector: rhs.cells, _orientation: PhantomData::<IsColl>}
+            }
+        }
+
+        impl Sub<Collumn<$T>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn sub(self, mut rhs: Collumn<$T>) -> Self::Output {
+                assert!(self.vector.len() == rhs.cells.len(), "Provided Colls are not of same length");
+                rhs.cells = self.vector.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l - x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof {vector: rhs.cells, _orientation: PhantomData::<IsColl>}
+            }
+        }
+
+        impl Sub<SpatialVectorNDof<$T, IsColl>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn sub(self, rhs: SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                let mut rhs = rhs.to_collumn();
+                assert!(self.vector.len() == rhs.cells.len(), "Provided Colls are not of same length");
+                rhs.cells = self.vector.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l - x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof {vector: rhs.cells, _orientation: PhantomData::<IsColl>}
+            }
+        }
+
+        impl Mul<Row<$T>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: Row<$T>) -> Self::Output {
+                let converted_self = self.clone().to_collumn();
+                $T::collumn_dot_row(&converted_self, &rhs)
+            }
+        }
+
+        impl Mul<SpatialVectorNDof<$T, IsRow>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: SpatialVectorNDof<$T, IsRow>) -> Self::Output {
+                let converted_self = self.clone().to_collumn();
+                let rhs = rhs.to_row();
+                $T::collumn_dot_row(&converted_self, &rhs)
+            }
+        }
+
+        impl Mul<Matrix<$T>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: Matrix<$T>) -> Self::Output {
+                let converted_self = self.clone().to_collumn();
+                $T::collumn_dot_matrix(&converted_self, &rhs)
+            }
+        }
+
+        impl Mul<$T> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn mul(self, rhs: $T) -> Self::Output {
+                let mut converted_self = self.clone().to_collumn();
+                converted_self.multiply_all_elements_by(rhs);
+                SpatialVectorNDof {vector: converted_self.cells, _orientation: PhantomData::<IsColl>}
+            }
+        }
+
+        impl Div<$T> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn div(self, rhs: $T) -> Self::Output {
+                let mut converted_self = self.clone().to_collumn();
+                converted_self.divide_all_elements_by(rhs);
+                SpatialVectorNDof {vector: converted_self.cells, _orientation: PhantomData::<IsColl>}
+            }
+        }
+
+        //////////////////////////////////////////
+        /// RIGHT HAND SIDE BORROWED
+        /// /////////////////////////////////////
+
+        impl Add<&Collumn<$T>> for SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn add(self, rhs: &Collumn<$T>) -> Self::Output {
+                let mut converted_self = self.to_collumn();
+                assert!(converted_self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
+                converted_self.cells = converted_self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof {vector: converted_self.cells, _orientation: PhantomData::<IsColl>}
+            }
+        }
+
+        impl Add<&SpatialVectorNDof<$T, IsColl>> for SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn add(self, rhs: &SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                let mut converted_self = self.to_collumn();
+                assert!(converted_self.cells.len() == rhs.vector.len(), "Provided Colls are not of same length");
+                converted_self.cells = converted_self.cells.iter().zip(rhs.vector.iter()).map(|(x_l, x_r)| x_l + x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof {vector: converted_self.cells, _orientation: PhantomData::<IsColl>}
+            }
+        }
+
+        impl Sub<&Collumn<$T>> for SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn sub(self, rhs: &Collumn<$T>) -> Self::Output {
+                let mut converted_self = self.to_collumn();
+                assert!(converted_self.cells.len() == rhs.cells.len(), "Provided Colls are not of same length");
+                converted_self.cells = converted_self.cells.iter().zip(rhs.cells.iter()).map(|(x_l, x_r)| x_l - x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof {vector: converted_self.cells, _orientation: PhantomData::<IsColl>}
+            }
+        }
+
+        impl Sub<&SpatialVectorNDof<$T, IsColl>> for SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn sub(self, rhs: &SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                let mut converted_self = self.to_collumn();
+                assert!(converted_self.cells.len() == rhs.vector.len(), "Provided Colls are not of same length");
+                converted_self.cells = converted_self.cells.iter().zip(rhs.vector.iter()).map(|(x_l, x_r)| x_l - x_r).collect::<Vec<$T>>();
+                SpatialVectorNDof {vector: converted_self.cells, _orientation: PhantomData::<IsColl>}
+            }
+        }
+
+        impl Mul<&Row<$T>> for SpatialVectorNDof<$T, IsColl> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &Row<$T>) -> Self::Output {
+                let converted_self = self.to_collumn();
+                $T::collumn_dot_row(&converted_self, &rhs)
+            }
+        }
+
+        impl Mul<&SpatialVectorNDof<$T, IsRow>> for SpatialVectorNDof<$T, IsColl> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &SpatialVectorNDof<$T, IsRow>) -> Self::Output {
+                let converted_self = self.to_collumn();
+                let rhs = rhs.clone().to_row();
+                $T::collumn_dot_row(&converted_self, &rhs)
+            }
+        }
+
+        impl Mul<&Matrix<$T>> for SpatialVectorNDof<$T, IsColl> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &Matrix<$T>) -> Self::Output {
+                let converted_self = self.to_collumn();
+                $T::collumn_dot_matrix(&converted_self, &rhs)
+            }
+        }
+
+        //////////////////////////////////////////
+        // ALL BOROWED
+        /////////////////////////////////////////
+
+        impl Add<&Collumn<$T>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn add(self, rhs: &Collumn<$T>) -> Self::Output {
+                self.clone() + rhs
+            }
+        }
+
+        impl Add<&SpatialVectorNDof<$T, IsColl>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn add(self, rhs: &SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                self.clone() + rhs
+            }
+        }
+
+        impl Sub<&Collumn<$T>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn sub(self, rhs: &Collumn<$T>) -> Self::Output {
+                self.clone() - rhs
+            }
+        }
+
+        impl Sub<&SpatialVectorNDof<$T, IsColl>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = SpatialVectorNDof<$T, IsColl>;
+
+            fn sub(self, rhs: &SpatialVectorNDof<$T, IsColl>) -> Self::Output {
+                self.clone() - rhs
+            }
+        }
+
+        impl Mul<&Row<$T>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &Row<$T>) -> Self::Output {
+                self.clone() * rhs
+            }
+        }
+
+        impl Mul<&SpatialVectorNDof<$T, IsRow>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &SpatialVectorNDof<$T, IsRow>) -> Self::Output {
+                self.clone() * rhs
+            }
+        }
+
+        impl Mul<&Matrix<$T>> for &SpatialVectorNDof<$T, IsColl> {
+            type Output = Matrix<$T>;
+
+            fn mul(self, rhs: &Matrix<$T>) -> Self::Output {
+                self.clone() * rhs
             }
         }
     }

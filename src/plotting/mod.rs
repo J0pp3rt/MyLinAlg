@@ -18,4 +18,7 @@ pub use plot_processor::{*};
 pub mod interactive;
 pub use interactive::{*};
 
+pub mod colormaps;
+pub use colormaps::{*};
+
 use plotters::coord::Shift;
