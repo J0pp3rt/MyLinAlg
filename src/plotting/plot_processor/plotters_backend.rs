@@ -83,6 +83,7 @@ macro_rules! make_std_axis {
 
         match $self.plots.plotting_settings.show_grid_major {
             false => {
+                println!("bya azsis");
                 $axis.bold_line_style(ShapeStyle{
                     color: WHITE.to_rgba(),
                     filled: false,
@@ -106,22 +107,19 @@ macro_rules! make_std_axis {
             _ => {}
         }
 
-        match $self.plots.plotting_settings.show_x_grid_minor {
+        match $self.plots.plotting_settings.show_x_mesh {
             false => {
                 $axis.disable_x_mesh();
             },
             _ => {}
         }
 
-        match $self.plots.plotting_settings.show_y_grid_minor {
+        match $self.plots.plotting_settings.show_y_mesh {
             false => {
                 $axis.disable_y_mesh();
             },
             _ => {}
         }
-
-        let mut grey = GREY.to_rgba();
-        grey.3 = grey.3 * 0.5;
 
         $axis
         .x_desc($self.plots.x_label.clone())
@@ -449,7 +447,7 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                                     let colormap = $plot.surface_3d.clone().unwrap().color_map.clone();
                                     x_values_converted.iter().enumerate().map( move |(x_index, _)|{
                                         Rectangle::new(
-                                            [(dx_per_node*(x_index as f64)+lowest_x, dy_per_node*(y_index as f64)+lowest_y),(dx_per_node*(x_index as f64 + 1.)+lowest_y, dy_per_node*(y_index as f64 +1.)+lowest_y)],
+                                            [(dx_per_node*(x_index as f64)+lowest_x, dy_per_node*(y_index as f64)+lowest_y),(dx_per_node*(x_index as f64 + 1.)+lowest_x, dy_per_node*(y_index as f64 +1.)+lowest_y)],
                                             ShapeStyle {
                                                 color: ColorMaps::get_color_from_map(vec![(((((z_row[x_index]).clone() as f32 - lowest_z as f32) / ((highest_z - lowest_z) as f32))).powf(1./3.))], colormap.clone()),
                                                 filled: true,
@@ -567,8 +565,8 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                                 if (row_highest as f64) > highest_z {highest_z = row_highest as f64};
                             }).collect::<Vec<()>>();
 
-                            let division_factor = 1. / $plot.plotting_settings.contour_n_lines as f64;
-                            let band_size = $plot.plotting_settings.contour_band_width as f64 / $plot.plotting_settings.contour_n_lines as f64;
+                            let division_factor =  1. / $plot.plotting_settings.contour_n_lines as f64;
+                            let band_size = $plot.plotting_settings.contour_band_width as f64 /$plot.plotting_settings.contour_n_lines as f64;
 
                             let contour_alpha_factor: f64;
                             if let Option::Some(factor) = $plot.contour.clone().unwrap().contour_alpha_factor {
@@ -592,7 +590,8 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                                             .enumerate()
                                             .filter(move |(x_index, _)| {
                                                 let normalized_value: f64 = (z_row_colorfilter[*x_index].clone() as f64 - lowest_z  ) / ((highest_z - lowest_z) );
-                                                if normalized_value % (division_factor as f64) < band_size && normalized_value > division_factor {
+                                                // if normalized_value % (division_factor as f64) < band_size && normalized_value > 1. / division_factor {
+                                                if (normalized_value)% (division_factor as f64) < band_size && normalized_value > division_factor{
                                                     true
                                                 } else {
                                                     false
@@ -600,7 +599,7 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                                             })
                                             .map( move |(x_index, _)|{
                                                 Rectangle::new(
-                                                    [(dx_per_node*(x_index as f64)+lowest_x, dy_per_node*(y_index as f64)+lowest_y),(dx_per_node*(x_index as f64 + 1.)+lowest_y, dy_per_node*(y_index as f64 +1.)+lowest_y)],
+                                                    [(dx_per_node*(x_index as f64)+lowest_x, dy_per_node*(y_index as f64)+lowest_y),(dx_per_node*(x_index as f64 + 1.)+lowest_x, dy_per_node*(y_index as f64 +1.)+lowest_y)],
                                                     ShapeStyle {
                                                         color: {
                                                             let mut color = ColorMaps::get_color_from_map(vec![(((((z_row[x_index]).clone() as f32 - lowest_z as f32) / ((highest_z - lowest_z) as f32))))], colormap.clone());
@@ -792,14 +791,14 @@ macro_rules! produce_other_2d_plot_settings {
             _ => {}
         }
 
-        match $self.plots.plotting_settings.show_x_grid_minor {
+        match $self.plots.plotting_settings.show_x_mesh {
             false => {
                 axis.disable_x_mesh();
             },
             _ => {}
         }
 
-        match $self.plots.plotting_settings.show_y_grid_minor {
+        match $self.plots.plotting_settings.show_y_mesh {
             false => {
                 axis.disable_y_mesh();
             },
@@ -880,17 +879,35 @@ macro_rules! produce_other_2d_plot_settings {
             if let Option::Some(color) = &series.color {
                 line_color = *color;
             } else if let Option::Some(color_map) = &series.color_map {
-                let index_of_line: f32;
+                let mut index_of_line: f32;
 
                 index_of_line = number as f32 / amount_of_lines as f32;
+                match color_map {
+                    PlotBuilderColorMaps::Palette99 => { },
+                    PlotBuilderColorMaps::Palette99ReversedOrder => {},
+                    _ => {
+                        index_of_line = ($self.plots.plotting_settings.color_map_restricter_upper_bound - $self.plots.plotting_settings.color_map_restricter_lower_bound) * index_of_line 
+                                        + $self.plots.plotting_settings.color_map_restricter_lower_bound;
+                    }
+                }
+
                 line_color = ColorMaps::get_color_from_map(vec![index_of_line, amount_of_lines as f32], color_map.clone())
             } else {
                 if let Option::Some(color) = $self.plots.plotting_settings.line_color {
                     line_color = color;
                 } else {
-                    let index_of_line: f32;
+                    let mut index_of_line: f32;
 
                     index_of_line = number as f32 / amount_of_lines as f32;
+
+                    match $self.plots.plotting_settings.color_map_line.clone() {
+                        PlotBuilderColorMaps::Palette99 => { },
+                        PlotBuilderColorMaps::Palette99ReversedOrder => {},
+                        _ => {
+                            index_of_line = ($self.plots.plotting_settings.color_map_restricter_upper_bound - $self.plots.plotting_settings.color_map_restricter_lower_bound) * index_of_line 
+                                            + $self.plots.plotting_settings.color_map_restricter_lower_bound;
+                        }
+                    }
 
                     line_color = ColorMaps::get_color_from_map(vec![index_of_line, amount_of_lines as f32], $self.plots.plotting_settings.color_map_line.clone());
                 }

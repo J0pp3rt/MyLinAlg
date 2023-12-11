@@ -525,25 +525,6 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                 } 
 
                 
-                // else {// include deduce ranges for all new types of plots that can be added.
-                //     // if things can be found on the z axis also note that
-
-                // }
-
-                // store found values only if user did not set limits yet!
-                if let Option::None = self.x_range {
-                    self.x_range = Option::Some(x_min..x_max);
-                }
-                if let Option::None = self.y_range {
-                    self.y_range = Option::Some(y_min..y_max);
-                }
-                if let Option::None = self.y2_range {
-                    self.y2_range = Option::Some(y2_min..y2_max);
-                }
-                if let Option::None = self.z_range {
-                    self.z_range = Option::Some(z_min..z_max);
-                }
-
                 // set axis type to linear on all axis that have values if not set yet
                 // x and y axis are allways used (i presume)
                 if let Option::None = self.x_axis_scaling {
@@ -566,7 +547,82 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                         self.z_axis_scaling = Option::Some(PlotAxisScaling::NoAxis);
                     }
                 }
+                
+                let x_axis_linear: bool;
+                let y_axis_linear: bool;
+                match (self.x_axis_scaling.clone(), self.y_axis_scaling.clone()) {
+                    (Option::Some(PlotAxisScaling::Linear), Option::Some(PlotAxisScaling::Linear)) => {
+                        x_axis_linear = true;
+                        y_axis_linear = true;
+                    },
+                    (Option::Some(PlotAxisScaling::Linear), _) => {
+                        x_axis_linear = true;
+                        y_axis_linear = false;
+                    },
+                    (_, Option::Some(PlotAxisScaling::Linear)) => {
+                        x_axis_linear = false;
+                        y_axis_linear = true;
+                    },
+                    _ => {
+                        x_axis_linear = false;
+                        y_axis_linear = false;
+                    }
+                }
 
+
+                if self.plotting_settings.axis_equal_length {
+                    let length_x = (x_max - x_min).abs();
+                    let length_y = (y_max - y_min).abs();
+                    let length_difference = length_x - length_y;
+                    if length_difference > 0. {
+                        if y_axis_linear {
+                            y_max += length_difference.abs() / 2.;
+                            y_min += -length_difference.abs() / 2.;
+                        }
+                    } else {
+                        if x_axis_linear {
+                            x_max += length_difference.abs() / 2.;
+                            x_min += -length_difference.abs() / 2.;
+                        }
+                    }
+
+                }
+
+                // make the plots just a bit bigger then the lines it contains!
+                if x_axis_linear {
+                    let dx = (x_max - x_min).abs()*self.plotting_settings.range_fitting_factor as $T;
+                    x_max += dx;
+                    x_min += -dx;
+                } else {
+                    x_max = x_max * 2 as $T;
+                    x_min = x_min / 2 as $T;
+                }
+                if y_axis_linear {
+                    let dy = (y_max - y_min).abs()*self.plotting_settings.range_fitting_factor as $T;
+                    y_max += dy;
+                    y_min += -dy;
+                } else {
+                    y_max = y_max * 2 as $T;
+                    y_min = y_min / 2 as $T;
+                }
+
+                let dy2 = (y2_max - y2_min).abs()*self.plotting_settings.range_fitting_factor as $T;
+                y2_max += dy2;
+                y2_min += -dy2;
+
+                // store found values only if user did not set limits yet!
+                if let Option::None = self.x_range {
+                    self.x_range = Option::Some(x_min..x_max);
+                }
+                if let Option::None = self.y_range {
+                    self.y_range = Option::Some(y_min..y_max);
+                }
+                if let Option::None = self.y2_range {
+                    self.y2_range = Option::Some(y2_min..y2_max);
+                }
+                if let Option::None = self.z_range {
+                    self.z_range = Option::Some(z_min..z_max);
+                }
                 // in the end all axis types and ranges should be of type Option::Some(_)
 
                 self

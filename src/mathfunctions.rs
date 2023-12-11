@@ -93,20 +93,20 @@ pub struct SpatialVectorWithBase2<T>  {
     pub y_direction: T,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NoDir {}
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct IsColl {}
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct IsRow {}
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SpatialVectorNDof<T, Orientation> {
     pub vector: Vec<T>,
     pub _orientation: PhantomData<Orientation>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SpatialVectorWithBasePointNDof<T, Orientation> {
     pub point: Vec<T>,
     pub vector: Vec<T>,
@@ -798,8 +798,8 @@ macro_rules! impl_math_functions_per_type {
             assert!(collumn.len() == row.len(), "collumn x row dimensions do not agree!");
 
             let mut rows = Vec::<Row<$T>>::with_capacity(collumn.len());
-            for index_r in 0..collumn.len() {
-                let cells = (0..collumn.len()).map(|index_c| row[index_r] * collumn[index_c]).collect::<Vec<$T>>();
+            for index_c in 0..collumn.len() {
+                let cells = (0..collumn.len()).map(|index_r| row[index_r] * collumn[index_c]).collect::<Vec<$T>>();
                 rows.push(Row{ cells })
             }
 

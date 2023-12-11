@@ -9,6 +9,9 @@ pub struct PlotStyleSettings {
     pub show_x_grid_minor: bool,
     pub show_y_grid_minor: bool,
     pub show_z_grid_minor: bool,
+    pub show_x_mesh: bool,
+    pub show_y_mesh: bool,
+    pub show_z_mesh: bool,
     pub x_grid_minor_subdevisions: Option<usize>,
     pub y_grid_minor_subdevisions: Option<usize>,
     pub z_grid_minor_subdevisions: Option<usize>,
@@ -19,6 +22,7 @@ pub struct PlotStyleSettings {
     pub show_x_axis: bool,
     pub show_y_axis: bool,
     pub show_z_axis: bool,
+    pub axis_equal_length: bool,
     pub plot_3d_pitch: f64,
     pub plot_3d_yaw: f64,
     pub plot_3d_scale: f64,
@@ -41,6 +45,7 @@ pub struct PlotStyleSettings {
     pub y_label_offset: i32,
     pub x_tick_mark_size: i32,
     pub y_tick_mark_size: i32,
+    pub range_fitting_factor: f64,
     pub plotters_x_label_area_size: i32,
     pub plotters_x_top_label_area_size: i32,
     pub plotters_y_label_area_size: i32,
@@ -66,6 +71,9 @@ impl Clone for PlotStyleSettings {
             , show_x_grid_minor: self.show_x_grid_minor.clone()
             , show_y_grid_minor: self.show_y_grid_minor.clone()
             , show_z_grid_minor: self.show_z_grid_minor.clone()
+            , show_x_mesh: self.show_x_mesh.clone()
+            , show_y_mesh: self.show_y_mesh.clone()
+            , show_z_mesh: self.show_z_mesh.clone()
             , x_grid_minor_subdevisions: self.x_grid_minor_subdevisions.clone()
             , y_grid_minor_subdevisions: self.y_grid_minor_subdevisions.clone()
             , z_grid_minor_subdevisions: self.z_grid_minor_subdevisions.clone()
@@ -76,6 +84,7 @@ impl Clone for PlotStyleSettings {
             , show_x_axis: self.show_x_axis.clone()
             , show_y_axis: self.show_y_axis.clone()
             , show_z_axis: self.show_z_axis.clone()
+            , axis_equal_length: self.axis_equal_length.clone()
             , plot_3d_pitch: self.plot_3d_pitch.clone()
             , plot_3d_yaw: self.plot_3d_yaw.clone()
             , plot_3d_scale: self.plot_3d_scale.clone()
@@ -98,6 +107,7 @@ impl Clone for PlotStyleSettings {
             , y_label_offset: self.y_label_offset.clone()
             , x_tick_mark_size: self.x_tick_mark_size.clone()
             , y_tick_mark_size: self.y_tick_mark_size.clone()
+            , range_fitting_factor: self.range_fitting_factor.clone()
             , plotters_x_label_area_size: self.plotters_x_label_area_size.clone()
             , plotters_x_top_label_area_size: self.plotters_x_top_label_area_size.clone()
             , plotters_y_label_area_size: self.plotters_y_label_area_size.clone()
@@ -116,29 +126,33 @@ impl Default for PlotStyleSettings {
             show_x_axis: true,
             show_y_axis: true,
             show_z_axis: true,
+            axis_equal_length: false,
             plot_3d_pitch: -0.8 / 2. * PI,
             plot_3d_yaw: 0.05,
             plot_3d_scale: 0.7,
             heatmap_n_points: 150,
             contour_n_points: 1000,
-            contour_n_lines: 10,
-            contour_band_width: 0.065,
+            contour_n_lines: 20,
+            contour_band_width: 0.08,
             contour_alpha_value: 0.5,
             show_grid_major: false,
             show_x_grid_minor: false,
             show_y_grid_minor: false,
             show_z_grid_minor: false,
+            show_x_mesh: true,
+            show_y_mesh: true,
+            show_z_mesh: true,
             x_grid_minor_subdevisions: Option::None,
             y_grid_minor_subdevisions: Option::None,
             z_grid_minor_subdevisions: Option::None,
-            x_grid_major_subdevisions: Option::None,
-            y_grid_major_subdevisions: Option::None,
+            y_grid_major_subdevisions: Option::Some(10),
+            x_grid_major_subdevisions: Option::Some(10),
             z_grid_major_subdevisions: Option::None,
             outer_figure_margins: 100,
             marker_fill: MarkerFill::Filled,
             marker_style: MarkerStyle::None,
             color_map_line: PlotBuilderColorMaps::Palette99,
-            color_map_restricter_lower_bound: 0.3,
+            color_map_restricter_lower_bound: 0.25,
             color_map_restricter_upper_bound: 1.,
             line_color: Option::None,
             title: String::new(),
@@ -148,6 +162,7 @@ impl Default for PlotStyleSettings {
             y_label_offset: 0,
             x_tick_mark_size: 13,
             y_tick_mark_size: 5,
+            range_fitting_factor: 0.05,
             plotters_x_label_area_size: 45,
             plotters_x_top_label_area_size: 0,
             plotters_y_label_area_size: 45,
