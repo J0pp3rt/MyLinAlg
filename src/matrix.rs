@@ -229,6 +229,7 @@ pub trait MatrixFunctions<T:MatrixValues> {
     fn get_collumn(&self, coll_number : usize) -> Collumn<T> ;
     fn to_vec_collumn_major(&self) -> Vec<T> ;
     fn to_vec_row_major(&self) -> Vec<T> ;
+    fn to_vec_vec_row_major(&self) -> Vec<Vec<T>> ;
     fn inverse_through_gauss(&self) -> Self;
     fn swap_rows(&mut self, row_1: usize, row_2: usize);
     fn substract_internal_row_from_row_by_index(&mut self, row_number_to_substract: usize, from_row_number: usize);
@@ -467,6 +468,14 @@ macro_rules! impl_matrix_functions_for_type {
             }
     
             output_vec
+        }
+
+        fn to_vec_vec_row_major(&self) -> Vec<Vec<$T>> {
+            let mut result_vec = Vec::<Vec<$T>>::with_capacity(self.height());
+            for row_index in 0..self.height() {
+                result_vec.push(self[row_index].cells.clone())
+            }
+            result_vec
         }
 
         fn inverse_through_gauss(&self) -> Self {

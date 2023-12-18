@@ -217,6 +217,12 @@ macro_rules! impl_combined_plots_functions_per_type {
                 self.plotting_settings.plotters_margin = (self.plotting_settings.plotters_margin as f64 * scale) as i32;
                 self.plotting_settings.plotters_figure_padding = (self.plotting_settings.plotters_figure_padding as f64 * scale) as i32;
 
+                self.plotting_settings.plotters_legend_margin = (self.plotting_settings.plotters_legend_margin as f64 * scale) as i32;
+                self.plotting_settings.plotters_legend_area_size = (self.plotting_settings.plotters_legend_area_size as f64 * scale) as i32;
+                self.plotting_settings.plotters_legend_font_size = (self.plotting_settings.plotters_legend_font_size as f64 * scale) as i32;
+                self.plotting_settings.plotters_legend_bar_size = (self.plotting_settings.plotters_legend_bar_size as f64 * scale) as i32;
+                self.plotting_settings.plotters_legend_bar_shift_x = (self.plotting_settings.plotters_legend_bar_shift_x as f64 * scale) as i32;
+                self.plotting_settings.plotters_legend_bar_shift_y = (self.plotting_settings.plotters_legend_bar_shift_y as f64 * scale) as i32;
                 self
             }
 

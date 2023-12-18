@@ -2,6 +2,18 @@ use std::f64::consts::PI;
 
 use crate::plotting::{*};
 
+#[derive(Clone)]
+pub enum LegendPosition {
+    NorthEast,
+    North,
+    NorthWest,
+    West,
+    SouthWest,
+    South,
+    SouthEast,
+    East
+}
+
 pub struct PlotStyleSettings {
     pub plot_width: u32,
     pub plot_height: u32,
@@ -38,6 +50,8 @@ pub struct PlotStyleSettings {
     pub color_map_restricter_lower_bound: f32,
     pub color_map_restricter_upper_bound: f32,
     pub line_color: Option<RGBAColor>,
+    pub legend_show: bool,
+    pub legend_location: LegendPosition,
     pub title: String,
     pub title_font_size: u32,
     pub label_font_size: u32,
@@ -52,6 +66,15 @@ pub struct PlotStyleSettings {
     pub plotters_right_y_label_area_size: i32,
     pub plotters_margin: i32,
     pub plotters_figure_padding: i32,
+    pub plotters_legend_margin: i32,
+    pub plotters_legend_area_size: i32,
+    pub plotters_legend_font_size: i32,
+    pub plotters_legend_transparancy: f64,
+    pub plotters_legend_bar_size: i32,
+    pub plotters_legend_bar_shift_x: i32,
+    pub plotters_legend_bar_shift_y: i32,
+
+
 
 }
 
@@ -100,6 +123,8 @@ impl Clone for PlotStyleSettings {
             , color_map_restricter_lower_bound: self.color_map_restricter_lower_bound.clone()
             , color_map_restricter_upper_bound: self.color_map_restricter_upper_bound.clone()
             , line_color: self.line_color.clone()
+            , legend_show: self.legend_show.clone()
+            , legend_location: self.legend_location.clone()
             , title: self.title.clone()
             , title_font_size: self.title_font_size.clone()
             , label_font_size: self.label_font_size.clone()
@@ -113,7 +138,15 @@ impl Clone for PlotStyleSettings {
             , plotters_y_label_area_size: self.plotters_y_label_area_size.clone()
             , plotters_right_y_label_area_size: self.plotters_right_y_label_area_size.clone()
             , plotters_margin: self.plotters_margin.clone()
-            , plotters_figure_padding: self.plotters_figure_padding.clone() }
+            , plotters_figure_padding: self.plotters_figure_padding.clone() 
+            , plotters_legend_margin: self.plotters_legend_margin.clone()
+            , plotters_legend_area_size: self.plotters_legend_area_size.clone()
+            , plotters_legend_font_size: self.plotters_legend_font_size.clone()
+            , plotters_legend_transparancy: self.plotters_legend_transparancy.clone()
+            , plotters_legend_bar_size: self.plotters_legend_bar_size.clone()
+            , plotters_legend_bar_shift_x: self.plotters_legend_bar_shift_x.clone()
+            , plotters_legend_bar_shift_y: self.plotters_legend_bar_shift_y.clone()
+        }
     }
 }
 
@@ -122,7 +155,7 @@ impl Default for PlotStyleSettings {
         PlotStyleSettings { 
             plot_width: 500,
             plot_height: 500,
-            line_width: 4,
+            line_width: 3,
             show_x_axis: true,
             show_y_axis: true,
             show_z_axis: true,
@@ -148,13 +181,15 @@ impl Default for PlotStyleSettings {
             y_grid_major_subdevisions: Option::Some(10),
             x_grid_major_subdevisions: Option::Some(10),
             z_grid_major_subdevisions: Option::None,
-            outer_figure_margins: 100,
+            outer_figure_margins: 10,
             marker_fill: MarkerFill::Filled,
             marker_style: MarkerStyle::None,
             color_map_line: PlotBuilderColorMaps::Palette99,
             color_map_restricter_lower_bound: 0.25,
             color_map_restricter_upper_bound: 1.,
             line_color: Option::None,
+            legend_show: false,
+            legend_location: LegendPosition::NorthEast,
             title: String::new(),
             title_font_size: 40,
             label_font_size: 20,
@@ -163,13 +198,19 @@ impl Default for PlotStyleSettings {
             x_tick_mark_size: 13,
             y_tick_mark_size: 5,
             range_fitting_factor: 0.05,
-            plotters_x_label_area_size: 45,
+            plotters_x_label_area_size: 55,
             plotters_x_top_label_area_size: 0,
-            plotters_y_label_area_size: 45,
+            plotters_y_label_area_size: 60,
             plotters_right_y_label_area_size: 10,
-            plotters_margin: 5,
+            plotters_margin: 25,
             plotters_figure_padding: 0,
-
+            plotters_legend_margin: 15,
+            plotters_legend_area_size: 5,
+            plotters_legend_font_size: 15,
+            plotters_legend_transparancy: 0.2,
+            plotters_legend_bar_size: 4,
+            plotters_legend_bar_shift_x: 10,
+            plotters_legend_bar_shift_y: 10,
             }
     }
 }

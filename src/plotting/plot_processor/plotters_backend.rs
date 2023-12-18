@@ -439,7 +439,7 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                                 if (row_highest as f64) > highest_z {highest_z = row_highest as f64};
                             }).collect::<Vec<()>>();
 
-                            let color_map = $plot.surface_3d.clone().unwrap().color_map;
+                            // let color_map = $plot.surface_3d.clone().unwrap().color_map;
 
                             chart.draw_series(
                                 y_values_converted.iter().enumerate().flat_map( |(y_index, _)|{
@@ -449,7 +449,8 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                                         Rectangle::new(
                                             [(dx_per_node*(x_index as f64)+lowest_x, dy_per_node*(y_index as f64)+lowest_y),(dx_per_node*(x_index as f64 + 1.)+lowest_x, dy_per_node*(y_index as f64 +1.)+lowest_y)],
                                             ShapeStyle {
-                                                color: ColorMaps::get_color_from_map(vec![(((((z_row[x_index]).clone() as f32 - lowest_z as f32) / ((highest_z - lowest_z) as f32))).powf(1./3.))], colormap.clone()),
+                                                color: ColorMaps::get_color_from_map(vec![(((((z_row[x_index]).clone() as f32 - lowest_z as f32) / ((highest_z - lowest_z) as f32))).powf(1./3.))], 
+                                                colormap.clone()),
                                                 filled: true,
                                                 stroke_width: 0
                                             }
@@ -709,6 +710,8 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type {
             fn bitmap_to_file(&mut self, file_path: &str) {
                 self.plots.plotting_settings.x_tick_mark_size = (self.plots.plotting_settings.x_tick_mark_size as f64 * 0.5) as i32;
                 self.plots.plotting_settings.y_label_offset = (self.plots.plotting_settings.y_label_offset as f64 *0.) as i32;
+
+                self.plots.plotting_settings.plotters_legend_bar_shift_y = (self.plots.plotting_settings.plotters_legend_bar_shift_y as f64 *0.0) as i32;
                 let (width, height) = self.plots.get_plot_dimensions();  
                 {
                     let mut root = BitMapBackend::new(file_path, (width, height)).into_drawing_area();
@@ -716,7 +719,7 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type {
                 }
             }
             
-        }
+        } 
     }
 }
 
@@ -912,21 +915,52 @@ macro_rules! produce_other_2d_plot_settings {
                     line_color = ColorMaps::get_color_from_map(vec![index_of_line, amount_of_lines as f32], $self.plots.plotting_settings.color_map_line.clone());
                 }
             }
-            let style = ShapeStyle {color: line_color, filled: marker_fill, stroke_width: line_width};
+            let style = ShapeStyle {color: line_color.clone(), filled: marker_fill, stroke_width: line_width};
+            let legend_style = ShapeStyle {color: line_color.clone(), filled: true, stroke_width: 1};
+            let bar_size = $self.plots.plotting_settings.plotters_legend_bar_size;
+            let bar_shift_x = $self.plots.plotting_settings.plotters_legend_bar_shift_x;
+            let bar_shift_y = $self.plots.plotting_settings.plotters_legend_bar_shift_y;
             if !(series.on_secondary_axis) {
                 $chart
                     .draw_series(LineSeries::new(series.x_values.iter().zip(series.y_values.clone()).map(|(x, y)| (*x as f64, y as f64)), style)
                     .point_size(marker_size))
                     .unwrap()
-                    .label(legend_name);
+                    .label(legend_name)
+                    .legend(move |(x,y)| Rectangle::new([(x - bar_shift_x, y - bar_shift_y), (x, y-bar_shift_y-bar_size)], legend_style));
             } else {
                 $chart
                     .draw_secondary_series(LineSeries::new(series.x_values.iter().zip(series.y_values.clone()).map(|(x, y)| (*x as f64, y as f64)), style)
                     .point_size(marker_size))
                     .unwrap()
-                    .label(legend_name);
+                    .label(legend_name)
+                    .legend(move |(x,y)| Rectangle::new([(x - bar_shift_x, y ), (x, y - bar_shift_y -bar_size)], legend_style));
             }            
         }
+
+        let legend_location: SeriesLabelPosition;
+        match $self.plots.plotting_settings.legend_location {
+            LegendPosition::NorthEast => {legend_location = SeriesLabelPosition::UpperRight},
+            LegendPosition::North => {legend_location = SeriesLabelPosition::UpperMiddle},
+            LegendPosition::NorthWest => {legend_location = SeriesLabelPosition::UpperLeft},
+            LegendPosition::West => {legend_location = SeriesLabelPosition::MiddleLeft},
+            LegendPosition::SouthWest => {legend_location = SeriesLabelPosition::LowerLeft},
+            LegendPosition::South => {legend_location = SeriesLabelPosition::LowerMiddle},
+            LegendPosition::SouthEast => {legend_location = SeriesLabelPosition::LowerRight},
+            LegendPosition::East => {legend_location = SeriesLabelPosition::MiddleRight}
+        }
+
+        if $self.plots.plotting_settings.legend_show {
+            $chart
+            .configure_series_labels()
+            .position(legend_location)
+            .margin($self.plots.plotting_settings.plotters_legend_margin)
+            .legend_area_size($self.plots.plotting_settings.plotters_legend_area_size)
+            .border_style(GREY)
+            .background_style(GREY.mix($self.plots.plotting_settings.plotters_legend_transparancy))
+            .label_font(("Calibri", $self.plots.plotting_settings.plotters_legend_font_size))
+            .draw().unwrap();
+        }
+
     }
 }
 
@@ -1100,17 +1134,45 @@ macro_rules! produce_other_3d_plot_settings {
             }
 
             let style = ShapeStyle {color: line_color, filled: marker_fill, stroke_width: line_width};
-
+            let legend_style = ShapeStyle {color: line_color.clone(), filled: true, stroke_width: 1};
+            let bar_size = $self.plots.plotting_settings.plotters_legend_bar_size;
+            let bar_shift_x = $self.plots.plotting_settings.plotters_legend_bar_shift_x;
+            let bar_shift_y = $self.plots.plotting_settings.plotters_legend_bar_shift_y;
             $chart
-                // .draw_series(LineSeries::new(series.x_values.iter().zip(series.y_values.clone()).map(|(x, y)| (*x as f64, y as f64)), style)
-                .draw_series(LineSeries::new(
-                    (0..series.x_values.len()).map(|index|
-                    (series.x_values[index] as f64, series.y_values[index] as f64, series.z_values[index] as f64)),
-                style)
-                .point_size(marker_size))
-                .unwrap()
-                .label(legend_name);
-       
+            // .draw_series(LineSeries::new(series.x_values.iter().zip(series.y_values.clone()).map(|(x, y)| (*x as f64, y as f64)), style)
+            .draw_series(LineSeries::new(
+                (0..series.x_values.len()).map(|index|
+                (series.x_values[index] as f64, series.y_values[index] as f64, series.z_values[index] as f64)),
+            style)
+            .point_size(marker_size))
+            .unwrap()
+            .label(legend_name)
+            .legend(move |(x,y)| Rectangle::new([(x - bar_shift_x, y ), (x, y - bar_shift_y -bar_size)], legend_style));
+            
+
+            let legend_location: SeriesLabelPosition;
+            match $self.plots.plotting_settings.legend_location {
+                LegendPosition::NorthEast => {legend_location = SeriesLabelPosition::UpperRight},
+                LegendPosition::North => {legend_location = SeriesLabelPosition::UpperMiddle},
+                LegendPosition::NorthWest => {legend_location = SeriesLabelPosition::UpperLeft},
+                LegendPosition::West => {legend_location = SeriesLabelPosition::MiddleLeft},
+                LegendPosition::SouthWest => {legend_location = SeriesLabelPosition::LowerLeft},
+                LegendPosition::South => {legend_location = SeriesLabelPosition::LowerMiddle},
+                LegendPosition::SouthEast => {legend_location = SeriesLabelPosition::LowerRight},
+                LegendPosition::East => {legend_location = SeriesLabelPosition::MiddleRight}
+            }
+    
+            if $self.plots.plotting_settings.legend_show {
+                $chart
+                .configure_series_labels()
+                .position(legend_location)
+                .margin($self.plots.plotting_settings.plotters_legend_margin)
+                .legend_area_size($self.plots.plotting_settings.plotters_legend_area_size)
+                .border_style(GREY)
+                .background_style(GREY.mix($self.plots.plotting_settings.plotters_legend_transparancy))
+                .label_font(("Calibri", $self.plots.plotting_settings.plotters_legend_font_size))
+                .draw().unwrap();
+            }
         }
     }
 }

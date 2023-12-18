@@ -78,6 +78,20 @@ pub struct PosNDof<T>  {
     pub x: Vec<T>,
 }
 
+impl<T> Index<usize> for PosNDof<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.x[index]
+    }
+}
+
+impl<T> IndexMut<usize> for PosNDof<T> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.x[index]
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SpatialVector2<T>  {
     pub x_direction: T,

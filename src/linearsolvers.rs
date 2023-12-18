@@ -4,6 +4,7 @@
 
 use crate::*;
 
+#[derive(Clone)]
 pub struct Solver2D<T: MatrixValues> {
     pub A_matrix: Matrix<T>,
     pub B_matrix: Matrix<T>,
@@ -15,6 +16,7 @@ pub struct Solved2D<T: MatrixValues> {
     pub B_matrix: Matrix<T>
 }
 
+#[derive(Clone)]
 pub enum Solver2DStrategy {
     Guass,
     LUDecomposition,

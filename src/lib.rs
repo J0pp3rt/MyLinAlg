@@ -42,6 +42,8 @@ pub use gpuaccalerators::{*};
 // pub use cpuaccalerators::{*};
 pub mod plotting;
 pub use plotting::{*};
+pub mod optimization;
+pub use optimization::{*};
 use std::ops::Not;
 use core::{f32};
 
@@ -71,6 +73,7 @@ use resvg::{usvg::{self, TreeParsing}};
 use resvg;
 use tiny_skia::{self, Pixmap};
 use plotters::prelude::*;
+use std::marker::PhantomData;
 
 fn test() {
     let test: PlotBuilder<f64> = PlotBuilder::new();
