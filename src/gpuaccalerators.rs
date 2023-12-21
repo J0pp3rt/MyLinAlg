@@ -384,3 +384,4 @@ macro_rules! impl_gpu_functions_per_type {
 // }
 
 
+impl_gpu_functions_per_type!(f64);

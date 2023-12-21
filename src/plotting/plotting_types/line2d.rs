@@ -30,12 +30,12 @@ pub trait Line2dFunctions<T> {
 
 macro_rules! impl_line_data_series_functions_per_type {
     ($T: ident) => {
-        impl Line2dFunctions<$T> for Line2d<$T> {
-            fn new(x_values: &Vec<$T>, y_values: &Vec<$T>) -> Self {
-                assert!(x_values.len() == y_values.len());
-                Self {
-                    x_values: x_values.clone(),
-                    y_values: y_values.clone(),
+
+        impl Default for Line2d<$T> {
+            fn default() -> Line2d<$T> {
+                Line2d::<$T> {
+                    x_values: Vec::new(),
+                    y_values: Vec::new(),
                     on_secondary_axis: false,
                     name: String::new(),
                     color: Option::None,
@@ -44,6 +44,17 @@ macro_rules! impl_line_data_series_functions_per_type {
                     line_width: Option::None,
                     marker_style: Option::None,
                     marker_fill: Option::None,
+                }
+            }
+        }
+
+        impl Line2dFunctions<$T> for Line2d<$T> {
+            fn new(x_values: &Vec<$T>, y_values: &Vec<$T>) -> Self {
+                assert!(x_values.len() == y_values.len());
+                Line2d::<$T> {
+                    x_values: x_values.clone(),
+                    y_values: y_values.clone(),
+                    ..Default::default()
                 }
             }
 

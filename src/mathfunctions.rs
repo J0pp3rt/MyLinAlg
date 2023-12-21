@@ -67,7 +67,7 @@ pub fn golden_ratio_conjugate() -> f64 {
     1. / golden_ratio()
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone, Copy)]
 pub struct Pos2<T>  {
     pub x: T,
     pub y: T

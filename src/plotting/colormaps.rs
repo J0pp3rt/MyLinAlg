@@ -15,7 +15,9 @@ pub enum PlotBuilderColorMaps {
     BoneInverser,
     Mandelbrodt,
     MandelBrodtInverse,
-    ConstantGray
+    ConstantGray,
+    Vulcano,
+    VulcanoInverse
 }
 
 pub struct ColorMaps {}
@@ -35,6 +37,8 @@ impl ColorMaps{
             PlotBuilderColorMaps::BoneInverser => Self::get_color_bone_inverse(input_values),
             PlotBuilderColorMaps::Mandelbrodt => Self::get_color_mandelbrodt(input_values),
             PlotBuilderColorMaps::MandelBrodtInverse => Self::get_color_mandelbrodt_inverse(input_values),
+            PlotBuilderColorMaps::Vulcano => Self::get_color_vulcano(input_values),
+            PlotBuilderColorMaps::VulcanoInverse => Self::get_color_vulcano_inverse(input_values),
             PlotBuilderColorMaps::ConstantGray => Self::get_color_gray(input_values),
         }
     }
@@ -87,6 +91,14 @@ impl ColorMaps{
 
     fn get_color_mandelbrodt_inverse(input_values: Vec<f32>) -> RGBAColor {
         Self::get_color_mandelbrodt(vec![1.-input_values[0]])
+    }
+
+    fn get_color_vulcano(input_values: Vec<f32>) -> RGBAColor {
+        VulcanoHSL::get_color(input_values[0]).to_rgba()
+    }
+
+    fn get_color_vulcano_inverse(input_values: Vec<f32>) -> RGBAColor {
+        Self::get_color_vulcano(vec![1.-input_values[0]])
     }
 
     fn get_color_gray(input_values: Vec<f32>) -> RGBAColor {

@@ -1,5 +1,8 @@
 use crate::plotting::{*};
 use plotters::style::text_anchor::{HPos, Pos, VPos};
+
+use plotters::prelude::{*};
+
 use crate::full_palette::GREY;
 use plotters::chart::DualCoordChartContext;
 pub trait PlotProcessorPlottersBackendFunctions<T> {
@@ -16,6 +19,7 @@ pub trait PlotProcessorPlottersBackendFunctionsForAllThePlottersBackends<OutputT
     fn simple_3d_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool);
     fn heatmap_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool);
     fn contour_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool);
+    fn polygon_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool);
 }
 
 macro_rules! make_std_chart {
@@ -83,7 +87,6 @@ macro_rules! make_std_axis {
 
         match $self.plots.plotting_settings.show_grid_major {
             false => {
-                println!("bya azsis");
                 $axis.bold_line_style(ShapeStyle{
                     color: WHITE.to_rgba(),
                     filled: false,
@@ -163,6 +166,9 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                 },
                 SupportedPlotTypes::Contour => {
                     self.contour_plot(root, true)
+                },
+                SupportedPlotTypes::Polygon => {
+                    self.polygon_plot(root, true)
                 },
                 SupportedPlotTypes::ContourAndLines2d => {
                     self.contour_plot(root, true);
@@ -380,7 +386,7 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                     let mut chart = chart
                         .build_cartesian_2d(range_x_f64.clone(), range_y_f64)
                         .unwrap()
-                        .set_secondary_coord((range_x_f64).log_scale(), (range_y2_f64));
+                        .set_secondary_coord((range_x_f64), (range_y2_f64));
 
                     let mut axis = chart.configure_mesh(); // all of this is stolen from "produce_other_2d_plot_settings" maybe be smarter about this!
 
@@ -643,6 +649,158 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                 },
             }
         }
+
+        fn polygon_plot(&self, root: &mut DrawingArea<OutputType, Shift>, is_primary_plot: bool) {
+
+            let range_x_f64 = self.plots.x_range.as_ref().unwrap().start as f64 .. self.plots.x_range.as_ref().unwrap().end as f64;
+            let range_y_f64 = self.plots.y_range.as_ref().unwrap().start as f64 .. self.plots.y_range.as_ref().unwrap().end as f64;
+            let range_y2_f64 = self.plots.y2_range.as_ref().unwrap().start as f64 .. self.plots.y2_range.as_ref().unwrap().end as f64;
+            // let range_y2_f64_dummy = 1. as f64 .. 1.1 as f64;
+
+            // using unwrap 
+            let x_axis_scaling = self.plots.x_axis_scaling.clone().expect("x axis scaling should have been set!");
+            let y_axis_scaling = self.plots.y_axis_scaling.clone().expect("y axis scaling should have been set!");
+            let y2_axis_scaling = self.plots.y2_axis_scaling.clone().expect("y2 axis scaling should have been set!");
+            
+            match (x_axis_scaling, y_axis_scaling) {
+                (PlotAxisScaling::Linear, PlotAxisScaling::Linear) => {},
+                _ => {panic!("Let's burn that bridge of non linear polygon plots once we get there")}
+            }
+            
+
+            let mut chart = ChartBuilder::on(&root);
+            let mut chart = make_std_chart!(self, chart);
+
+                let mut chart = chart
+                .build_cartesian_2d(range_x_f64.clone(), range_y_f64)
+                .unwrap()
+                .set_secondary_coord((range_x_f64), (range_y2_f64));
+
+            let mut axis = chart.configure_mesh(); // all of this is stolen from "produce_other_2d_plot_settings" maybe be smarter about this!
+
+            make_std_axis!(axis, self);
+
+            match self.plots.y2_axis_scaling.as_ref().unwrap() {
+                PlotAxisScaling::NoAxis => {},
+                _ => {
+                    // process the settings for the secondary axis, maybe this can be made nicer
+                    let secondary_axis_label = self.plots.y2_label.clone();
+    
+                    chart
+                        .configure_secondary_axes()
+                        .y_desc(secondary_axis_label)
+                        .draw().unwrap();
+                }
+            }
+
+            let lowest_z_in_plot = self.plots.z_range.as_ref().unwrap().start;
+            let highest_z_in_plot = self.plots.z_range.as_ref().unwrap().end;
+            let z_range_plot: f32;
+            if (lowest_z_in_plot as f32) - (highest_z_in_plot as f32) == 0. {
+                z_range_plot = 1.
+            } else {
+                z_range_plot = highest_z_in_plot as f32 - lowest_z_in_plot as f32;
+            }
+            
+            let number_of_polygon = self.plots.polygons.as_ref().unwrap().polygons.len();
+
+            for (number, polygon) in self.plots.polygons.as_ref().unwrap().polygons.iter().enumerate() {
+                let z_value = polygon.z_value as f32;
+                let polygon_color: RGBAColor;
+                match (polygon.color, self.plots.polygons.as_ref().unwrap().color) {
+                    (Option::Some(color), _) => {
+                        // priotity: individual polygon color
+                        polygon_color = color;
+                    },
+                    (Option::None, Option::Some(color)) => {
+                        // 2nd priority: constant polygon set coloring
+                        polygon_color = color;
+                    },
+                    _ => {
+                        // reverting back to polygon set colormap
+                        let mut index_of_line: f32;
+        
+                        
+                        match self.plots.polygons.as_ref().unwrap().color_map {
+                            PlotBuilderColorMaps::Palette99 => {
+                                index_of_line = (number / number_of_polygon) as f32;
+                            },
+                            PlotBuilderColorMaps::Palette99ReversedOrder => {
+                                index_of_line = (number / number_of_polygon) as f32;
+                            },
+                            _ => {
+                                index_of_line = ((z_value - lowest_z_in_plot as f32) / z_range_plot) as f32;
+                                index_of_line = (self.plots.plotting_settings.color_map_restricter_upper_bound - self.plots.plotting_settings.color_map_restricter_lower_bound) * index_of_line 
+                                                + self.plots.plotting_settings.color_map_restricter_lower_bound;
+                            }
+                        }
+                        polygon_color = ColorMaps::get_color_from_map(vec![index_of_line, number_of_polygon as f32], self.plots.polygons.as_ref().unwrap().color_map.clone())
+                    }
+                }
+
+                let line_width: u32;
+                match (polygon.line_width, self.plots.polygons.as_ref().unwrap().line_width) {
+                    (Option::Some(line_width_polygon),_) => {
+                        line_width = line_width_polygon;
+                    },
+                    (Option::None, Option::Some(line_width_polygon)) => {
+                        line_width = line_width_polygon;
+                    }
+                    _ => {
+                        line_width = self.plots.plotting_settings.polygon_line_width;
+                    }
+                }
+
+                let polygon_is_filled: bool;
+                match (polygon.filled, self.plots.polygons.as_ref().unwrap().filled) {
+                    (Option::Some(filled_bool),_) => {
+                        polygon_is_filled = filled_bool;
+                    },
+                    (Option::None, Option::Some(filled_bool)) => {
+                        polygon_is_filled = filled_bool;
+                    }
+                    _ => {
+                        polygon_is_filled = self.plots.plotting_settings.polygon_filled;
+                    }
+                }
+
+                let style = ShapeStyle {color: polygon_color.clone(), filled: polygon_is_filled, stroke_width: line_width};
+
+                let polygon_x_values = polygon.x_values.clone();
+                let polygon_y_values = polygon.y_values.clone();
+
+                let (backend_base_x, backend_base_y) = chart.backend_coord(&(polygon_x_values[0] as f64, polygon_y_values[0] as f64));
+
+                let collected_points = polygon.x_values
+                    .iter()
+                    .zip(&polygon.y_values)
+                    .map(|(x,y)| {
+                        let base_x = backend_base_x.clone();
+                        let base_y = backend_base_y.clone();
+                        let (coordinates_backend_x , coordinates_backend_y) = chart.backend_coord(&(*x as f64, *y as f64));
+                        (coordinates_backend_x-base_x, coordinates_backend_y-base_y)
+                    }).collect::<Vec<(i32,i32)>>();
+
+                // let polygon_converted_to_plotters = plotters::element::Polygon::new(
+                //     collected_points,
+                //     style
+                // );
+
+                // let coordinates = chart.backend_coord();
+
+                chart   
+                    .draw_series(
+                        (0..1).map(|_|{
+                            EmptyElement::at((polygon_x_values[0] as f64, polygon_y_values[0] as f64))
+                            + plotters::element::Polygon::new(&*collected_points, style)
+                        })
+                    ) 
+                    .unwrap();
+                
+            }
+
+
+        }
     }
 }}
 
@@ -727,86 +885,86 @@ macro_rules! produce_other_2d_plot_settings {
     ($chart: expr, $self: expr) => {
         let mut axis = $chart.configure_mesh();
 
-        match $self.plots.plotting_settings.x_grid_major_subdevisions {
-            Option::Some(n_lines) => {
-                axis.x_labels(n_lines);
-            },
-            _ => {} // default is to already show major gridlines
-        }
+        // match $self.plots.plotting_settings.x_grid_major_subdevisions {
+        //     Option::Some(n_lines) => {
+        //         axis.x_labels(n_lines);
+        //     },
+        //     _ => {} // default is to already show major gridlines
+        // }
 
-        match $self.plots.plotting_settings.y_grid_major_subdevisions {
-            Option::Some(n_lines) => {
-                axis.y_labels(n_lines);
-            },
-            _ => {} // default is to already show major gridlines
-        }
+        // match $self.plots.plotting_settings.y_grid_major_subdevisions {
+        //     Option::Some(n_lines) => {
+        //         axis.y_labels(n_lines);
+        //     },
+        //     _ => {} // default is to already show major gridlines
+        // }
 
-        match $self.plots.plotting_settings.show_x_grid_minor {
-            true => {
-                match $self.plots.plotting_settings.x_grid_minor_subdevisions {
-                    Option::Some(n_lines) => {
-                        axis.x_max_light_lines(n_lines);
-                    },
-                    _ => {} // default is to already show minor gridlines
-                }
-            },
-            false => {
-                axis.x_max_light_lines(0);
-            }
-        }
+        // match $self.plots.plotting_settings.show_x_grid_minor {
+        //     true => {
+        //         match $self.plots.plotting_settings.x_grid_minor_subdevisions {
+        //             Option::Some(n_lines) => {
+        //                 axis.x_max_light_lines(n_lines);
+        //             },
+        //             _ => {} // default is to already show minor gridlines
+        //         }
+        //     },
+        //     false => {
+        //         axis.x_max_light_lines(0);
+        //     }
+        // }
 
-        match $self.plots.plotting_settings.show_y_grid_minor {
-            true => {
-                match $self.plots.plotting_settings.y_grid_minor_subdevisions {
-                    Option::Some(n_lines) => {
-                        axis.y_max_light_lines(n_lines);
-                    },
-                    _ => {} // default is to already show minor gridlines
-                }
-            },
-            false => {
-                axis.y_max_light_lines(0);
-            }
-        }
+        // match $self.plots.plotting_settings.show_y_grid_minor {
+        //     true => {
+        //         match $self.plots.plotting_settings.y_grid_minor_subdevisions {
+        //             Option::Some(n_lines) => {
+        //                 axis.y_max_light_lines(n_lines);
+        //             },
+        //             _ => {} // default is to already show minor gridlines
+        //         }
+        //     },
+        //     false => {
+        //         axis.y_max_light_lines(0);
+        //     }
+        // }
 
-        match $self.plots.plotting_settings.show_grid_major {
-            false => {
-                axis.bold_line_style(ShapeStyle{
-                    color: WHITE.to_rgba(),
-                    filled: false,
-                    stroke_width: 0
-                });
-            },
-            true => {}
-        }
+        // match $self.plots.plotting_settings.show_grid_major {
+        //     false => {
+        //         axis.bold_line_style(ShapeStyle{
+        //             color: WHITE.to_rgba(),
+        //             filled: false,
+        //             stroke_width: 0
+        //         });
+        //     },
+        //     true => {}
+        // }
 
-        match $self.plots.plotting_settings.show_x_axis {
-            false => {
-                axis.disable_x_axis();
-            },
-            _ => {}
-        }
+        // match $self.plots.plotting_settings.show_x_axis {
+        //     false => {
+        //         axis.disable_x_axis();
+        //     },
+        //     _ => {}
+        // }
 
-        match $self.plots.plotting_settings.show_y_axis {
-            false => {
-                axis.disable_y_axis();
-            },
-            _ => {}
-        }
+        // match $self.plots.plotting_settings.show_y_axis {
+        //     false => {
+        //         axis.disable_y_axis();
+        //     },
+        //     _ => {}
+        // }
 
-        match $self.plots.plotting_settings.show_x_mesh {
-            false => {
-                axis.disable_x_mesh();
-            },
-            _ => {}
-        }
+        // match $self.plots.plotting_settings.show_x_mesh {
+        //     false => {
+        //         axis.disable_x_mesh();
+        //     },
+        //     _ => {}
+        // }
 
-        match $self.plots.plotting_settings.show_y_mesh {
-            false => {
-                axis.disable_y_mesh();
-            },
-            _ => {}
-        }
+        // match $self.plots.plotting_settings.show_y_mesh {
+        //     false => {
+        //         axis.disable_y_mesh();
+        //     },
+        //     _ => {}
+        // }
 
         make_std_axis!(axis, $self);
         

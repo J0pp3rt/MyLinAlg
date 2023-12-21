@@ -6,3 +6,6 @@ pub use line3d::{*};
 
 pub mod surface3d;
 pub use surface3d::{*};
+
+pub mod polygons;
+pub use polygons::{*};

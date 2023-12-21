@@ -1,12 +1,12 @@
 use crate::plotting::{*};
 
-
 #[derive(Clone)]
 pub struct PlotBuilder<T> {
     pub lines_2d: Option<Vec<Line2d<T>>>,
     pub lines_3d: Option<Vec<Line3d<T>>>,
     pub surface_3d: Option<Surface3d<T, SurfacePlot>>,
     pub contour: Option<Surface3d<T, ContourPlot>>,
+    pub polygons: Option<PolygonSet<T>>,
     pub plot_type: Option<SupportedPlotTypes>,
     pub plot_width: Option<u32>,
     pub plot_height: Option<u32>,
@@ -33,6 +33,7 @@ pub enum SupportedPlotTypes {
     HeatMap,
     HeatMapAndLines2d,
     Contour,
+    Polygon,
     ContourAndLines2d,
     HeatMapContourAndLines2d,
 }
@@ -71,6 +72,9 @@ pub trait PlotBuilderFunctions<T> {
     fn add_contour(&mut self, contour: Surface3d<T, ContourPlot>) -> &mut Self;
     fn add_contour_plot_fn(&mut self, z_function: Rc<Box<dyn Fn(Vec<f64>) -> f64>>) -> &mut Self;
     fn add_contour_plot_xyz(&mut self, x_data: &Vec<T>, y_data: &Vec<T>, z_data: &Vec<Vec<T>>) -> &mut Self;
+    fn guarantee_polygon_set_initialized(&mut self) -> &mut Self;
+    fn add_simple_polygon(&mut self, polygon: PolygonElement<T>) -> &mut Self;
+    fn add_polygon_set(&mut self, polygon_set: PolygonSet<T>) -> &mut Self;
     fn to_plot_processor_unitialized(self) -> PlotProcessor<T, NoPlotBackend>;
     fn to_plotters_processor(self) -> PlotProcessor<T, PlottersBackend>;
     fn to_plotpy_processor(self) -> PlotProcessor<T, PlotPyBackend>;
@@ -86,6 +90,7 @@ macro_rules! impl_combined_plots_functions_per_type {
                     lines_3d: Option::None,
                     surface_3d: Option::None,
                     contour: Option::None,
+                    polygons: Option::None,
                     plot_type: Option::None,
                     plot_width: Option::None,
                     plot_height: Option::None,
@@ -202,6 +207,7 @@ macro_rules! impl_combined_plots_functions_per_type {
                 self.plotting_settings.plot_width = (self.plotting_settings.plot_width as f64 * scale) as u32;
                 self.plotting_settings.plot_height = (self.plotting_settings.plot_height as f64 * scale) as u32;
                 self.plotting_settings.line_width = (self.plotting_settings.line_width as f64 * scale) as u32;
+                self.plotting_settings.polygon_line_width = (self.plotting_settings.polygon_line_width as f64 * scale) as u32;
                 self.plotting_settings.outer_figure_margins = (self.plotting_settings.outer_figure_margins as f64 * scale) as u32;
                 self.plotting_settings.title_font_size = (self.plotting_settings.title_font_size as f64 * scale) as u32;
                 self.plotting_settings.label_font_size = (self.plotting_settings.label_font_size as f64 * scale) as u32;
@@ -314,6 +320,30 @@ macro_rules! impl_combined_plots_functions_per_type {
             fn add_contour_plot_xyz(&mut self, x_data: &Vec<$T>, y_data: &Vec<$T>, z_data: &Vec<Vec<$T>>) -> &mut Self {
                 let contour_plot = Surface3d::new_contour_xyz(x_data, y_data, z_data);
                 self.add_contour(contour_plot);
+                self
+            }
+
+            fn guarantee_polygon_set_initialized(&mut self) -> &mut Self {
+                match {if let Option::Some(_) = self.polygons {true} else {false}} {
+                    true => {},
+                    false => {self.polygons = Option::Some(PolygonSet::new());}
+                }
+
+                self
+            }
+
+            fn add_simple_polygon(&mut self, polygon: PolygonElement<$T>) -> &mut Self {
+                self.guarantee_polygon_set_initialized();
+                self.polygons.as_mut().unwrap().polygons.push(polygon);
+
+                self
+            }
+
+            fn add_polygon_set(&mut self, polygon_set: PolygonSet<$T>) -> &mut Self {
+                // for now, this replaces the current "self.polygons" 
+                // in future, adding them togehter is possible.
+                self.polygons = Option::Some(polygon_set);
+
                 self
             }
 
@@ -530,6 +560,38 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
 
                 } 
 
+
+                if let Option::Some(polygons) = &self.polygons { 
+                    found_any_on_z = true;
+                    for polygon in &polygons.polygons {
+                        for x_value in &polygon.x_values {
+                            if *x_value < x_min {
+                                x_min = *x_value;
+                            }
+                            if *x_value > x_max {
+                                x_max = *x_value;
+                            }
+                        }
+
+                        for y_value in &polygon.y_values {
+                            if *y_value < y_min {
+                                y_min = *y_value;
+                            }
+                            if *y_value > y_max {
+                                y_max = *y_value;
+                            }
+                        }
+
+                        let z_value = polygon.z_value;
+                        if z_value < z_min {
+                            z_min = z_value;
+                        }
+                        if z_value > z_max {
+                            z_max = z_value;
+                        }
+
+                    }
+                } 
                 
                 // set axis type to linear on all axis that have values if not set yet
                 // x and y axis are allways used (i presume)
@@ -852,6 +914,13 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                                 SupportedPlotTypes::HeatMap
                             }
                         },
+                        SupportedPlotTypes::Polygon => {
+                            if let Option::None = self.polygons {
+                                panic!("No polygon set initialized, can not make polygon plot")
+                            } else {
+                                SupportedPlotTypes::Polygon
+                            }
+                        },
                         SupportedPlotTypes::HeatMapAndLines2d => {
                             let surface3d_detected: bool;
                             let lines2d_detected: bool;
@@ -942,6 +1011,7 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                     } else {
                         plot_surface_3d_included = false;
                     }
+
                     let plot_contour_included: bool;
                     if let Some(_) = self.contour {
                         plot_contour_included = true;
@@ -949,30 +1019,39 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
                         plot_contour_included = false;
                     }
 
+                    let plot_polygon_included: bool;
+                    if let Some(_) = self.polygons {
+                        plot_polygon_included = true;
+                    } else {
+                        plot_polygon_included = false;
+                    }
 
                     // match the supported combinations
-                    match (plot_2d_line_included, plot_3d_line_included, plot_surface_3d_included,plot_contour_included) {
-                        (true, false, false, false) => {                       
+                    match (plot_2d_line_included, plot_3d_line_included, plot_surface_3d_included,plot_contour_included, plot_polygon_included) {
+                        (true, false, false, false, false) => {                       
                             SupportedPlotTypes::Lines2d
                         },
-                        (false, true, false, false) => {
+                        (false, true, false, false, false) => {
                             SupportedPlotTypes::Lines3d
-                        }
-                        (false, false, true, false) => {
+                        },
+                        (false, false, true, false, false) => {
                             SupportedPlotTypes::HeatMap
-                        }
-                        (true, false, true, false) => {
+                        },
+                        (true, false, true, false, false) => {
                             SupportedPlotTypes::HeatMapAndLines2d
-                        }
-                        (false, false, false, true) => {
+                        },
+                        (false, false, false, true, false) => {
                             SupportedPlotTypes::Contour
-                        }
-                        (true, false, false, true) => {
+                        },
+                        (true, false, false, true, false) => {
                             SupportedPlotTypes::ContourAndLines2d
+                        },
+                        (false, false, false, false, true) => {
+                            SupportedPlotTypes::Polygon
                         }
-                        (true, false, true, true) => {
+                        (true, false, true, true, false) => {
                             SupportedPlotTypes::HeatMapContourAndLines2d
-                        }
+                        },
                         // (true, true, false, false) => { // AKA all other options, meant to be _ => { but left as example
                         //     println!("Found combination of plots: plot_2d_line = {}, plot_3d_line = {}", plot_2d_line_included, plot_3d_line_included);
                         //     panic!("This combination of plots is not supported!");
