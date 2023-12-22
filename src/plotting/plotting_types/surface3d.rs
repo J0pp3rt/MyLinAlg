@@ -15,8 +15,16 @@ pub struct Surface3d<T, Type> {
     pub z_values: Option<Vec<Vec<T>>>,
     pub z_function: Option<Rc<Box<dyn Fn(Vec<f64>) -> f64>>>,
     pub n_contour_lines: Option<usize>,
+    pub band_size: Option<f64>,
     pub color_map: PlotBuilderColorMaps,
     pub contour_alpha_factor: Option<f64>,
+    pub plot_zeroth_contour: Option<bool>,
+    pub plot_non_zeroth_contour: Option<bool>,
+    pub plot_positve: Option<bool>,
+    pub plot_zero: Option<bool>,
+    pub plot_negative: Option<bool>,
+    pub contour_force_plot_around_zero: Option<bool>,
+    pub contour_force_plot_around_zero_range: Option<Range<f64>>,
     _type: PhantomData<Type>
 }
 
@@ -28,8 +36,16 @@ impl<T> Default for Surface3d<T, SurfacePlot> {
             z_values: Option::None, 
             z_function: Option::None, 
             n_contour_lines: Option::None,
+            band_size: Option::None,
             color_map: PlotBuilderColorMaps::ViridisInverse,
             contour_alpha_factor: Option::None,
+            plot_zeroth_contour: Option::None,
+            plot_non_zeroth_contour: Option::None,
+            plot_positve: Option::None,
+            plot_zero: Option::None,
+            plot_negative: Option::None,
+            contour_force_plot_around_zero: Option::None,
+            contour_force_plot_around_zero_range: Option::None,
             _type: PhantomData::<SurfacePlot>
         }
     }
@@ -43,8 +59,16 @@ impl<T> Default for Surface3d<T, ContourPlot> {
             z_values: Option::None, 
             z_function: Option::None, 
             n_contour_lines: Option::None,
+            band_size: Option::None,
             color_map: PlotBuilderColorMaps::ConstantGray,
             contour_alpha_factor: Option::None,
+            plot_zeroth_contour: Option::None,
+            plot_non_zeroth_contour: Option::None,
+            plot_positve: Option::None,
+            plot_zero: Option::None,
+            plot_negative: Option::None,
+            contour_force_plot_around_zero: Option::None,
+            contour_force_plot_around_zero_range: Option::None,
             _type: PhantomData::<ContourPlot>
         }
     }
@@ -62,6 +86,8 @@ pub trait ContourFunctions<T> {
     fn new_contour_xyz(x_values: &Vec<T>, y_values: &Vec<T>, z_values: &Vec<Vec<T>>) -> Surface3d<T, ContourPlot>;
     fn set_colormap(&mut self, color_map: PlotBuilderColorMaps) -> &Self;
     fn get_color(&self, input_variables: Vec<f32>) -> RGBAColor;
+    fn use_constraint_contour_preset(&mut self) -> &mut Self;
+    fn use_constraint_filled_preset(&mut self) -> &mut Self;
 }
 
 macro_rules! impl_3d_line_functions {
@@ -133,6 +159,33 @@ macro_rules! impl_3d_line_functions {
                     }
                 }
                 
+            }
+
+            fn use_constraint_contour_preset(&mut self) -> &mut Self {
+                self.plot_zeroth_contour = Option::Some(false);
+                self.plot_non_zeroth_contour = Option::Some(false);
+                self.color_map = PlotBuilderColorMaps::ConstantRed;
+                self.contour_force_plot_around_zero = Option::Some(true);
+                self.contour_force_plot_around_zero_range = Option::Some(0. .. 0.01);
+
+                self.plot_negative = Option::Some(false);
+                self.contour_alpha_factor = Option::Some(0.5);
+
+
+                self
+            }
+
+            fn use_constraint_filled_preset(&mut self) -> &mut Self {
+                self.plot_zeroth_contour = Option::Some(true);
+                self.plot_non_zeroth_contour = Option::Some(true);
+                self.color_map = PlotBuilderColorMaps::ConstantRed;
+
+                self.plot_negative = Option::Some(false);
+                self.band_size = Option::Some(1.);
+
+                self.contour_alpha_factor = Option::Some(0.2);
+
+                self
             }
 
         }

@@ -72,6 +72,7 @@ pub trait RowFunctions<T:MatrixValues> {
     fn substract_row(&mut self, substraction_row: Row<T>)-> &mut Self ;
     fn substract_all(&mut self, substraction_row: Row<T>)-> &mut Self;
     fn replace_values(&mut self, index_range: Range<usize>, values: Vec<T>)-> &mut Self;
+    fn subtract_scalar(&mut self, value: T) -> &mut Self;
 
 }
 
@@ -233,6 +234,13 @@ macro_rules! impl_row_type {
                 // instead of range use rangebounds apperantly
                 for (val_index, row_index) in index_range.enumerate() {
                     self.cells[row_index] = values[val_index];
+                }
+                self
+            }
+
+            fn subtract_scalar(&mut self, value: $T) -> &mut Self {
+                for cell in self.cells.iter_mut() {
+                    *cell = *cell - value;
                 }
                 self
             }

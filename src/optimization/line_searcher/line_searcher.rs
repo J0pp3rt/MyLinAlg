@@ -1,10 +1,10 @@
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum LineSearchExtrapolationMethods {
     GoldenRuleExtrapolation
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub enum LineSearchInterpolationMethods {
     GoldenRuleInterpolation,
     QuadraticInterpolation,
@@ -14,6 +14,7 @@ use plotters::element::CoordMapper;
 
 use crate::{*};
 
+#[derive(Clone)]
 pub struct LineSearcher {
     pub cost_controller: CostController,
     pub search_line: SpatialVectorWithBasePointNDof<f64, IsColl>,

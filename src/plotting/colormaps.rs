@@ -16,6 +16,7 @@ pub enum PlotBuilderColorMaps {
     Mandelbrodt,
     MandelBrodtInverse,
     ConstantGray,
+    ConstantRed,
     Vulcano,
     VulcanoInverse
 }
@@ -40,6 +41,7 @@ impl ColorMaps{
             PlotBuilderColorMaps::Vulcano => Self::get_color_vulcano(input_values),
             PlotBuilderColorMaps::VulcanoInverse => Self::get_color_vulcano_inverse(input_values),
             PlotBuilderColorMaps::ConstantGray => Self::get_color_gray(input_values),
+            PlotBuilderColorMaps::ConstantRed => Self::get_color_red(input_values),
         }
     }
 
@@ -103,6 +105,10 @@ impl ColorMaps{
 
     fn get_color_gray(input_values: Vec<f32>) -> RGBAColor {
         GREY.to_rgba()
+    }
+
+    fn get_color_red(input_values: Vec<f32>) -> RGBAColor {
+        RED.to_rgba()
     }
 
 }

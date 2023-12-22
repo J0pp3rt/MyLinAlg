@@ -407,7 +407,7 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                     }
 
                     macro_rules! draw_the_heatmap {
-                        ($plot: expr, $chart: expr, $x_values: expr, $y_values: expr, $z_values: expr) => {
+                        ($surface_plot: expr, $chart: expr, $x_values: expr, $y_values: expr, $z_values: expr) => {
                             let n_points_x = $x_values.len();
                             let n_points_y = $y_values.len();
         
@@ -450,7 +450,7 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                             chart.draw_series(
                                 y_values_converted.iter().enumerate().flat_map( |(y_index, _)|{
                                     let z_row = (z_values_for_iter[y_index]).clone();
-                                    let colormap = $plot.surface_3d.clone().unwrap().color_map.clone();
+                                    let colormap = $surface_plot.color_map.clone();
                                     x_values_converted.iter().enumerate().map( move |(x_index, _)|{
                                         Rectangle::new(
                                             [(dx_per_node*(x_index as f64)+lowest_x, dy_per_node*(y_index as f64)+lowest_y),(dx_per_node*(x_index as f64 + 1.)+lowest_x, dy_per_node*(y_index as f64 +1.)+lowest_y)],
@@ -467,24 +467,24 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                         };
                     }
 
-                    match (self.plots.surface_3d.as_ref().unwrap().x_values.clone(), self.plots.surface_3d.as_ref().unwrap().y_values.clone(), self.plots.surface_3d.as_ref().unwrap().z_values.clone(), self.plots.surface_3d.as_ref().unwrap().z_function.clone()) {
-                        (Option::Some(x_values), Option::Some(y_values),Option::Some(z_values), _) => {
-                            draw_the_heatmap!(self.plots, chart, x_values, y_values, z_values);
-                        },
-                        (_,_,_,Option::Some(z_function)) => {
-                            let x_values = f64::linspace(self.plots.x_range.clone().unwrap().start as f64, self.plots.x_range.clone().unwrap().end as f64, self.plots.plotting_settings.heatmap_n_points);
-                            let y_values = f64::linspace(self.plots.y_range.clone().unwrap().start as f64, self.plots.y_range.clone().unwrap().end as f64, self.plots.plotting_settings.heatmap_n_points);
-                            let z_values: Vec<Vec<f64>> = y_values.iter().map(|y| {
-                                x_values.iter().map(|x| {
-                                    (z_function)(vec![*x,*y])
-                                }).collect()
-                            }).collect();
-                            draw_the_heatmap!(self.plots, chart, x_values, y_values, z_values);
-                        },
-                        _ => {}
+                    for surface_plot in self.plots.surface_3d.as_ref().unwrap() {
+                        match (surface_plot.x_values.clone(), surface_plot.y_values.clone(), surface_plot.z_values.clone(), surface_plot.z_function.clone()) {
+                            (Option::Some(x_values), Option::Some(y_values),Option::Some(z_values), _) => {
+                                draw_the_heatmap!(surface_plot, chart, x_values, y_values, z_values);
+                            },
+                            (_,_,_,Option::Some(z_function)) => {
+                                let x_values = f64::linspace(self.plots.x_range.clone().unwrap().start as f64, self.plots.x_range.clone().unwrap().end as f64, self.plots.plotting_settings.heatmap_n_points);
+                                let y_values = f64::linspace(self.plots.y_range.clone().unwrap().start as f64, self.plots.y_range.clone().unwrap().end as f64, self.plots.plotting_settings.heatmap_n_points);
+                                let z_values: Vec<Vec<f64>> = y_values.iter().map(|y| {
+                                    x_values.iter().map(|x| {
+                                        (z_function)(vec![*x,*y])
+                                    }).collect()
+                                }).collect();
+                                draw_the_heatmap!(surface_plot, chart, x_values, y_values, z_values);
+                            },
+                            _ => {}
+                        }
                     }
-
-
 
                     // todo!(); // this one took 10 minutes to find
                 },
@@ -534,7 +534,7 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                     }
 
                     macro_rules! draw_the_contour_plot {
-                        ($plot: expr, $chart: expr, $x_values: expr, $y_values: expr, $z_values: expr) => {
+                        ($plot: expr, $contour_plot: expr, $chart: expr, $x_values: expr, $y_values: expr, $z_values: expr) => {
                             let n_points_x = $x_values.len();
                             let n_points_y = $y_values.len();
         
@@ -572,15 +572,81 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                                 if (row_highest as f64) > highest_z {highest_z = row_highest as f64};
                             }).collect::<Vec<()>>();
 
-                            let division_factor =  1. / $plot.plotting_settings.contour_n_lines as f64;
-                            let band_size = $plot.plotting_settings.contour_band_width as f64 /$plot.plotting_settings.contour_n_lines as f64;
+                            let n_contour_lines: f64;
+                            let band_size: f64;
+
+                            if let Option::Some(n_contour_lines_prefered) = $contour_plot.n_contour_lines {
+                                n_contour_lines = n_contour_lines_prefered as f64; 
+                            } else {
+                                n_contour_lines = $plot.plotting_settings.contour_n_lines as f64;
+                            }
+
+                            if let Option::Some(band_size_prefered) = $contour_plot.band_size {
+                                band_size = band_size_prefered as f64; 
+                            } else {
+                                band_size = $plot.plotting_settings.contour_band_width as f64;
+                            }
+
+                            let division_factor =  1. / n_contour_lines;
+                            let band_size = band_size as f64 /n_contour_lines;
 
                             let contour_alpha_factor: f64;
-                            if let Option::Some(factor) = $plot.contour.clone().unwrap().contour_alpha_factor {
+                            if let Option::Some(factor) = $contour_plot.contour_alpha_factor {
                                 contour_alpha_factor = factor;
                             } else {
                                 contour_alpha_factor = $plot.plotting_settings.contour_alpha_value;
                             }
+
+                            let plot_positive_values: bool;
+                            let plot_negative_values: bool;
+                            let plot_zero_values: bool;
+
+                            if let Option::Some(factor) = $contour_plot.plot_positve {
+                                plot_positive_values = factor;
+                            } else {
+                                plot_positive_values = $plot.plotting_settings.contour_plot_positive;
+                            }
+
+                            if let Option::Some(factor) = $contour_plot.plot_zero {
+                                plot_zero_values = factor;
+                            } else {
+                                plot_zero_values = $plot.plotting_settings.contour_plot_zero;
+                            }
+
+                            if let Option::Some(factor) = $contour_plot.plot_negative {
+                                plot_negative_values = factor;
+                            } else {
+                                plot_negative_values = $plot.plotting_settings.contour_plot_negative;
+                            }
+
+                            let plot_zeroth_contour: bool;
+                            let plot_non_zeroth_contour: bool;
+                            if let Option::Some(factor) = $contour_plot.plot_zeroth_contour {
+                                plot_zeroth_contour = factor;
+                            } else {
+                                plot_zeroth_contour = $plot.plotting_settings.contour_include_zeroth_contour;
+                            }
+
+                            if let Option::Some(factor) = $contour_plot.plot_non_zeroth_contour {
+                                plot_non_zeroth_contour = factor;
+                            } else {
+                                plot_non_zeroth_contour = $plot.plotting_settings.contour_include_non_zeroth_contour;
+                            }
+
+                            let force_around_zero: bool;
+                            let force_around_zero_range: Range<f64>;
+                            if let Option::Some(factor) = $contour_plot.contour_force_plot_around_zero {
+                                force_around_zero = factor;
+                            } else {
+                                force_around_zero = $plot.plotting_settings.contour_force_plot_around_zero;
+                            }
+
+                            if let Option::Some(factor) = $contour_plot.contour_force_plot_around_zero_range.clone() {
+                                force_around_zero_range = factor;
+                            } else {
+                                force_around_zero_range = $plot.plotting_settings.contour_force_plot_around_zero_range.clone();
+                            }
+
 
                             chart.draw_series(
                                 y_values_converted
@@ -589,17 +655,40 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                                     .flat_map( |(y_index, _)|{
                                         let z_row = (z_values_for_iter[y_index]).clone();
                                         let z_row_colorfilter = (z_values_for_iter[y_index]).clone();
-                                        let colormap = $plot.contour.clone().unwrap().color_map.clone();
+                                        let colormap = $contour_plot.color_map.clone();
 
 
                                         x_values_converted
                                             .iter()
                                             .enumerate()
                                             .filter(move |(x_index, _)| {
-                                                let normalized_value: f64 = (z_row_colorfilter[*x_index].clone() as f64 - lowest_z  ) / ((highest_z - lowest_z) );
-                                                // if normalized_value % (division_factor as f64) < band_size && normalized_value > 1. / division_factor {
-                                                if (normalized_value)% (division_factor as f64) < band_size && normalized_value > division_factor{
-                                                    true
+                                                let real_value = z_row_colorfilter[*x_index].clone() as f64;
+                                                let normalized_value: f64 = ( real_value - lowest_z  ) / ((highest_z - lowest_z) );
+
+                                                let zeroth_contour_reducer = normalized_value < band_size*0.1;
+                                                let include_zero_contour_condition = normalized_value < division_factor && plot_zeroth_contour;
+                                                let include_zeroth = include_zero_contour_condition && zeroth_contour_reducer;
+
+                                                let is_around_zero = 
+                                                    real_value > force_around_zero_range.start * (highest_z - lowest_z) 
+                                                    &&
+                                                    real_value < force_around_zero_range.end * (highest_z - lowest_z);
+                                                
+                                                let is_around_zero_condtition = is_around_zero && force_around_zero;
+
+                                                let repeated_contour_condition = 
+                                                    (normalized_value)% (division_factor as f64) < band_size && plot_non_zeroth_contour
+                                                    && 
+                                                    normalized_value > division_factor;
+                                                
+                                                if repeated_contour_condition || include_zeroth || is_around_zero_condtition {
+                                                    if real_value > 0. {
+                                                        plot_positive_values
+                                                    } else if real_value < 0. {
+                                                        plot_negative_values
+                                                    } else {
+                                                        plot_zero_values
+                                                    }
                                                 } else {
                                                     false
                                                 }
@@ -623,24 +712,24 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
                         };
                     }
 
-                    match (self.plots.contour.as_ref().unwrap().x_values.clone(), self.plots.contour.as_ref().unwrap().y_values.clone(), self.plots.contour.as_ref().unwrap().z_values.clone(), self.plots.contour.as_ref().unwrap().z_function.clone()) {
-                        (Option::Some(x_values), Option::Some(y_values),Option::Some(z_values), _) => {
-                            draw_the_contour_plot!(self.plots, chart, x_values, y_values, z_values);
-                        },
-                        (_,_,_,Option::Some(z_function)) => {
-                            let x_values = f64::linspace(self.plots.x_range.clone().unwrap().start as f64, self.plots.x_range.clone().unwrap().end as f64, self.plots.plotting_settings.contour_n_points);
-                            let y_values = f64::linspace(self.plots.y_range.clone().unwrap().start as f64, self.plots.y_range.clone().unwrap().end as f64, self.plots.plotting_settings.contour_n_points);
-                            let z_values: Vec<Vec<f64>> = y_values.iter().map(|y| {
-                                x_values.iter().map(|x| {
-                                    (z_function)(vec![*x,*y])
-                                }).collect()
-                            }).collect();
-                            draw_the_contour_plot!(self.plots, chart, x_values, y_values, z_values);
-                        },
-                        _ => {}
+                    for contour_plot in self.plots.contour.as_ref().unwrap() {
+                        match (contour_plot.x_values.clone(), contour_plot.y_values.clone(), contour_plot.z_values.clone(), contour_plot.z_function.clone()) {
+                            (Option::Some(x_values), Option::Some(y_values),Option::Some(z_values), _) => {
+                                draw_the_contour_plot!(self.plots, contour_plot, chart, x_values, y_values, z_values);
+                            },
+                            (_,_,_,Option::Some(z_function)) => {
+                                let x_values = f64::linspace(self.plots.x_range.clone().unwrap().start as f64, self.plots.x_range.clone().unwrap().end as f64, self.plots.plotting_settings.contour_n_points);
+                                let y_values = f64::linspace(self.plots.y_range.clone().unwrap().start as f64, self.plots.y_range.clone().unwrap().end as f64, self.plots.plotting_settings.contour_n_points);
+                                let z_values: Vec<Vec<f64>> = y_values.iter().map(|y| {
+                                    x_values.iter().map(|x| {
+                                        (z_function)(vec![*x,*y])
+                                    }).collect()
+                                }).collect();
+                                draw_the_contour_plot!(self.plots, contour_plot, chart, x_values, y_values, z_values);
+                            },
+                            _ => {}
+                        }
                     }
-
-
 
                     // todo!(); // this one took 10 minutes to find
                 },

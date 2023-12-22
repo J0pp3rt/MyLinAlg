@@ -4,8 +4,8 @@ use crate::plotting::{*};
 pub struct PlotBuilder<T> {
     pub lines_2d: Option<Vec<Line2d<T>>>,
     pub lines_3d: Option<Vec<Line3d<T>>>,
-    pub surface_3d: Option<Surface3d<T, SurfacePlot>>,
-    pub contour: Option<Surface3d<T, ContourPlot>>,
+    pub surface_3d: Option<Vec<Surface3d<T, SurfacePlot>>>,
+    pub contour: Option<Vec<Surface3d<T, ContourPlot>>>,
     pub polygons: Option<PolygonSet<T>>,
     pub plot_type: Option<SupportedPlotTypes>,
     pub plot_width: Option<u32>,
@@ -66,9 +66,11 @@ pub trait PlotBuilderFunctions<T> {
     fn guarantee_3d_lines_initialized(&mut self) -> &mut Self;
     fn add_3d_line(&mut self, line_3d: &Line3d<T>) -> &mut Self;
     fn add_simple_3d_line(&mut self, x_data: &Vec<T>, y_data: &Vec<T>, z_data: &Vec<T>) -> &mut Self;
+    fn guarantee_surface_plot_initialized(&mut self) -> &mut Self;
     fn add_surface_3d(&mut self, surface_3d: Surface3d<T, SurfacePlot>) -> &mut Self;
     fn add_surface_plot_fn(&mut self, z_function: Rc<Box<dyn Fn(Vec<f64>) -> f64>>) -> &mut Self;
     fn add_surface_plot_xyz(&mut self, x_data: &Vec<T>, y_data: &Vec<T>, z_data: &Vec<Vec<T>>) -> &mut Self;
+    fn guarantee_contour_plot_initialized(&mut self) -> &mut Self;
     fn add_contour(&mut self, contour: Surface3d<T, ContourPlot>) -> &mut Self;
     fn add_contour_plot_fn(&mut self, z_function: Rc<Box<dyn Fn(Vec<f64>) -> f64>>) -> &mut Self;
     fn add_contour_plot_xyz(&mut self, x_data: &Vec<T>, y_data: &Vec<T>, z_data: &Vec<Vec<T>>) -> &mut Self;
@@ -288,36 +290,59 @@ macro_rules! impl_combined_plots_functions_per_type {
             }
 
             fn add_surface_3d(&mut self, surface_3d: Surface3d<$T, SurfacePlot>) -> &mut Self {
-                self.surface_3d = Option::Some(surface_3d);
+                self.surface_3d.as_mut().unwrap().push(surface_3d);
+
+                self
+            }
+
+            fn guarantee_surface_plot_initialized(&mut self) -> &mut Self {
+                // only call this function when a 2d Line will be added
+                if let Option::None = self.surface_3d {
+                    self.surface_3d = Option::Some(Vec::<Surface3d<$T, SurfacePlot>>::new());
+                }
 
                 self
             }
 
             fn add_surface_plot_fn(&mut self, z_function: Rc<Box<dyn Fn(Vec<f64>) -> f64>>) -> &mut Self {
+                self.guarantee_surface_plot_initialized();
                 let surface_plot = Surface3d::new_surface_fn(z_function);
                 self.add_surface_3d(surface_plot);
                 self
             }
 
             fn add_surface_plot_xyz(&mut self, x_data: &Vec<$T>, y_data: &Vec<$T>, z_data: &Vec<Vec<$T>>) -> &mut Self {
+                self.guarantee_surface_plot_initialized();
                 let surface_plot = Surface3d::new_surface_xyz(x_data, y_data, z_data);
                 self.add_surface_3d(surface_plot);
                 self
             }
 
+            fn guarantee_contour_plot_initialized(&mut self) -> &mut Self {
+                // only call this function when a 2d Line will be added
+                if let Option::None = self.contour {
+                    self.contour = Option::Some(Vec::<Surface3d<$T, ContourPlot>>::new());
+                }
+
+                self
+            }
+
             fn add_contour(&mut self, contour: Surface3d<$T, ContourPlot>) -> &mut Self {
-                self.contour = Option::Some(contour);
+                self.guarantee_contour_plot_initialized();
+                self.contour.as_mut().unwrap().push(contour);
 
                 self
             }
 
             fn add_contour_plot_fn(&mut self, z_function: Rc<Box<dyn Fn(Vec<f64>) -> f64>>) -> &mut Self {
+                self.guarantee_contour_plot_initialized();
                 let contour_plot = Surface3d::new_contour_fn(z_function);
                 self.add_contour(contour_plot);
                 self
             }
 
             fn add_contour_plot_xyz(&mut self, x_data: &Vec<$T>, y_data: &Vec<$T>, z_data: &Vec<Vec<$T>>) -> &mut Self {
+                self.guarantee_contour_plot_initialized();
                 let contour_plot = Surface3d::new_contour_xyz(x_data, y_data, z_data);
                 self.add_contour(contour_plot);
                 self
@@ -483,81 +508,83 @@ macro_rules! impl_combined_plots_known_range_functions_per_type {
 
                     }
                 } 
-                if let Option::Some(surface_3d) = &self.surface_3d { 
-                    match (&surface_3d.x_values, &surface_3d.y_values, &surface_3d.z_values){
-                    (Option::Some(x_values), Option::Some(y_values), Option::Some(z_values)) => {
-                        found_any_on_z = true;
-                            for x_value in x_values.iter() {
-                                if *x_value < x_min {
-                                    x_min = *x_value
-                                }
-                                if *x_value > x_max {
-                                    x_max = *x_value
-                                }
-                            }
-
-                            for y_value in y_values.iter() {
-                                if *y_value < y_min {
-                                    y_min = *y_value
-                                }
-                                if *y_value > y_max {
-                                    y_max = *y_value
-                                }
-                            }
-
-                            for z_value_row in z_values.iter() {
-                                for z_value in z_value_row {
-                                    if *z_value < z_min {
-                                        z_min = *z_value
+                if let Option::Some(surface_3d_plots) = &self.surface_3d { 
+                    for surface_3d in surface_3d_plots {
+                        match (&surface_3d.x_values, &surface_3d.y_values, &surface_3d.z_values){
+                        (Option::Some(x_values), Option::Some(y_values), Option::Some(z_values)) => {
+                            found_any_on_z = true;
+                                for x_value in x_values.iter() {
+                                    if *x_value < x_min {
+                                        x_min = *x_value
                                     }
-                                    if *z_value > z_max {
-                                        z_max = *z_value
+                                    if *x_value > x_max {
+                                        x_max = *x_value
                                     }
                                 }
-                            }
-                        },
-                        _ => {}
 
-                    }
+                                for y_value in y_values.iter() {
+                                    if *y_value < y_min {
+                                        y_min = *y_value
+                                    }
+                                    if *y_value > y_max {
+                                        y_max = *y_value
+                                    }
+                                }
 
+                                for z_value_row in z_values.iter() {
+                                    for z_value in z_value_row {
+                                        if *z_value < z_min {
+                                            z_min = *z_value
+                                        }
+                                        if *z_value > z_max {
+                                            z_max = *z_value
+                                        }
+                                    }
+                                }
+                            },
+                            _ => {}
+
+                        }
+                    }   
                 } 
-                if let Option::Some(contour) = &self.contour { 
-                    match (&contour.x_values, &contour.y_values, &contour.z_values){
-                    (Option::Some(x_values), Option::Some(y_values), Option::Some(z_values)) => {
-                        found_any_on_z = true;
-                            for x_value in x_values.iter() {
-                                if *x_value < x_min {
-                                    x_min = *x_value
-                                }
-                                if *x_value > x_max {
-                                    x_max = *x_value
-                                }
-                            }
-
-                            for y_value in y_values.iter() {
-                                if *y_value < y_min {
-                                    y_min = *y_value
-                                }
-                                if *y_value > y_max {
-                                    y_max = *y_value
-                                }
-                            }
-
-                            for z_value_row in z_values.iter() {
-                                for z_value in z_value_row {
-                                    if *z_value < z_min {
-                                        z_min = *z_value
+                if let Option::Some(contour_plots) = &self.contour { 
+                    for contour in contour_plots {
+                        match (&contour.x_values, &contour.y_values, &contour.z_values){
+                        (Option::Some(x_values), Option::Some(y_values), Option::Some(z_values)) => {
+                            found_any_on_z = true;
+                                for x_value in x_values.iter() {
+                                    if *x_value < x_min {
+                                        x_min = *x_value
                                     }
-                                    if *z_value > z_max {
-                                        z_max = *z_value
+                                    if *x_value > x_max {
+                                        x_max = *x_value
                                     }
                                 }
-                            }
-                        },
-                        _ => {}
 
+                                for y_value in y_values.iter() {
+                                    if *y_value < y_min {
+                                        y_min = *y_value
+                                    }
+                                    if *y_value > y_max {
+                                        y_max = *y_value
+                                    }
+                                }
+
+                                for z_value_row in z_values.iter() {
+                                    for z_value in z_value_row {
+                                        if *z_value < z_min {
+                                            z_min = *z_value
+                                        }
+                                        if *z_value > z_max {
+                                            z_max = *z_value
+                                        }
+                                    }
+                                }
+                            },
+                            _ => {}
+
+                        }
                     }
-
                 } 
 
 
