@@ -9,7 +9,8 @@ pub struct OptimizerSetup {
     constaint_equality_functions: Vec<CostFunction>,
     constaint_inequality_functions: Vec<InequalityConstraint>,
     initial_coordinates: Option<PosNDof<f64>>,
-
+    coordinates_upper_bound: Option<PosNDof<f64>>,
+    coordinates_lower_bound: Option<PosNDof<f64>>,
     optimization_settings: OptimizationSettings,
 }
 
@@ -26,6 +27,8 @@ impl Default for OptimizerSetup {
             constaint_inequality_functions: Vec::new(), 
             cost_function_normalization_factor: Vec::new(),
             initial_coordinates: Option::None,
+            coordinates_upper_bound: Option::None,
+            coordinates_lower_bound: Option::None,
             optimization_settings: default_optimization_settings,
          }
     }
@@ -36,6 +39,8 @@ impl Default for OptimizerSetup {
 pub struct ConstrainedRules {
     pub constrained: OptimizationType,
     pub magnification_factor: f64,
+    pub magnification_factor_increment_factor: f64,
+    pub magnification_factor_increment_addition: f64,
     pub penalty_function: Option<PenaltyFunction>,
 }
 
@@ -44,6 +49,8 @@ impl Default for ConstrainedRules {
         Self { 
             constrained: OptimizationType::Unconstrained, 
             magnification_factor: 1.,
+            magnification_factor_increment_factor: 1.5,
+            magnification_factor_increment_addition: 0.,
             penalty_function: Option::None, 
         }
     }
@@ -57,7 +64,8 @@ impl ConstrainedRules {
 
 #[derive(Clone, Copy, Debug)]
 pub enum OptimizationType {
-    Constrained,
+    ConstrainedProgramming,
+    ConstrainedMerit,
     Unconstrained
 }
 
@@ -92,6 +100,7 @@ pub struct OptimizationSettings {
     pub differentiating_step_size: f64,
     pub line_search_initial_step_size: f64,
     pub line_search_threshold: f64,
+    pub line_search_threshold_increment_factor: f64,
     pub logging_settings: LoggingSettings,
 }
 
@@ -101,7 +110,8 @@ impl Default for OptimizationSettings {
         let default_optimization_end_threshold = 0.5;
         let default_line_search_initial_step_size = 1.;
         let default_differentiating_step_size = 0.00000001;
-        let default_line_search_threshold = 0.1;
+        let default_line_search_threshold = 0.2;
+        let default_line_search_threshold_increment_factor = 1.;
 
         Self { 
             line_search_extrapolation_method: LineSearchExtrapolationMethods::GoldenRuleExtrapolation, 
@@ -115,6 +125,7 @@ impl Default for OptimizationSettings {
             differentiating_step_size: default_differentiating_step_size,
             line_search_initial_step_size: default_line_search_initial_step_size,
             line_search_threshold: default_line_search_threshold,
+            line_search_threshold_increment_factor: default_line_search_threshold_increment_factor,
             logging_settings: LoggingSettings::default()
         }
     }
@@ -167,7 +178,7 @@ impl OptimizerSetup {
         self
     }
 
-    pub fn add_inequality_constraint_function(&mut self, inequality_contraint: CostFunction) -> &mut Self {
+    pub fn add_inequality_constraint_function(&mut self, inequality_contraint: ConstraintFunction) -> &mut Self {
         let constraint = InequalityConstraint {
             constraint_function: inequality_contraint,
             algebraic_derivative_supplied: false,
@@ -179,7 +190,7 @@ impl OptimizerSetup {
         self
     }
 
-    pub fn add_inequality_constraint_function_with_derivative(&mut self, inequality_contraint: CostFunction, derivative: AlgebraicDerivative) -> &mut Self {
+    pub fn add_inequality_constraint_function_with_derivative(&mut self, inequality_contraint: ConstraintFunction, derivative: AlgebraicDerivative) -> &mut Self {
         let constraint = InequalityConstraint {
             constraint_function: inequality_contraint,
             algebraic_derivative_supplied: true,
@@ -203,8 +214,32 @@ impl OptimizerSetup {
         self
     }
 
+    pub fn constraint_magnification_factor_increment_factor(&mut self, increment_factor: f64) -> &mut Self {
+        self.optimization_settings.constraint_rules.magnification_factor_increment_factor = increment_factor;
+
+        self
+    }
+
+    pub fn constraint_magnification_factor_increment_addition(&mut self, increment_addition: f64) -> &mut Self {
+        self.optimization_settings.constraint_rules.magnification_factor_increment_addition = increment_addition;
+
+        self
+    }
+
     pub fn initial_values(&mut self, initial_coordinates: PosNDof<f64>) -> &mut Self {
         self.initial_coordinates = Option::Some(initial_coordinates);
+
+        self
+    }
+
+    pub fn set_lower_bound(&mut self, lower_bound: Vec<f64>) -> &mut Self {
+        self.coordinates_lower_bound = Option::Some(PosNDof { x: lower_bound });
+
+        self
+    }
+
+    pub fn set_upper_bound(&mut self, upper_bound: Vec<f64>) -> &mut Self {
+        self.coordinates_upper_bound = Option::Some(PosNDof { x: upper_bound });
 
         self
     }
@@ -227,15 +262,8 @@ impl OptimizerSetup {
         self
     }
 
-    pub fn use_contraints(&mut self, use_contraints: bool) -> &mut Self {
-        match use_contraints {
-            true => {
-                self.optimization_settings.constraint_rules.constrained = OptimizationType::Constrained;
-            },
-            false => {
-                self.optimization_settings.constraint_rules.constrained = OptimizationType::Unconstrained;
-            }
-        }
+    pub fn use_contraints(&mut self, use_contraints_type: OptimizationType) -> &mut Self {
+        self.optimization_settings.constraint_rules.constrained = use_contraints_type;
         self
     }
 
@@ -329,6 +357,8 @@ impl OptimizerSetup {
             self.constaint_equality_functions,
             self.constaint_inequality_functions,
             self.initial_coordinates.expect("No intial points have been provided!"),
+            self.coordinates_upper_bound,
+            self.coordinates_lower_bound,
             self.optimization_settings,
         );
 

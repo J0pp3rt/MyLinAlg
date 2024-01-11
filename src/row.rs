@@ -143,6 +143,7 @@ macro_rules! impl_row_type {
             //     }
             //     Row { cells}
             // }
+
         
             fn all_values_equal(&self, value: $T) ->bool {
                 let mut no_inequality_found = true;

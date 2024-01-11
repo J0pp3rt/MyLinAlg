@@ -37,7 +37,7 @@ impl<T> Default for Surface3d<T, SurfacePlot> {
             z_function: Option::None, 
             n_contour_lines: Option::None,
             band_size: Option::None,
-            color_map: PlotBuilderColorMaps::ViridisInverse,
+            color_map: PlotBuilderColorMaps::ViridisInverse(1.),
             contour_alpha_factor: Option::None,
             plot_zeroth_contour: Option::None,
             plot_non_zeroth_contour: Option::None,
@@ -60,7 +60,7 @@ impl<T> Default for Surface3d<T, ContourPlot> {
             z_function: Option::None, 
             n_contour_lines: Option::None,
             band_size: Option::None,
-            color_map: PlotBuilderColorMaps::ConstantGray,
+            color_map: PlotBuilderColorMaps::ConstantGray(0.5),
             contour_alpha_factor: Option::None,
             plot_zeroth_contour: Option::None,
             plot_non_zeroth_contour: Option::None,
@@ -111,8 +111,8 @@ macro_rules! impl_3d_line_functions {
 
             fn set_colormap(&mut self, color_map: PlotBuilderColorMaps) -> &Self {
                 match color_map {
-                    PlotBuilderColorMaps::Palette99 => {println!("The palette colormap and Surface plots are a recipe for disaster, making no change")},
-                    PlotBuilderColorMaps::Palette99ReversedOrder => {println!("The palette colormap and Surface plots are a recipe for disaster, making no change")}
+                    PlotBuilderColorMaps::Palette99(_) => {println!("The palette colormap and Surface plots are a recipe for disaster, making no change")},
+                    PlotBuilderColorMaps::Palette99ReversedOrder(_) => {println!("The palette colormap and Surface plots are a recipe for disaster, making no change")}
                     _ => {self.color_map = color_map;} 
                 }
                 self
@@ -141,8 +141,8 @@ macro_rules! impl_3d_line_functions {
 
             fn set_colormap(&mut self, color_map: PlotBuilderColorMaps) -> &Self {
                 match color_map {
-                    PlotBuilderColorMaps::Palette99 => {println!("The palette colormap and contour plots are a recipe for disaster, making no change (note to self: might be possible if contour line number is index (devision of...))")},
-                    PlotBuilderColorMaps::Palette99ReversedOrder => {println!("The palette colormap and Surface plots are a recipe for disaster, making no change (note to self: might be possible if contour line number is index (devision of...))")}
+                    PlotBuilderColorMaps::Palette99(_) => {println!("The palette colormap and contour plots are a recipe for disaster, making no change (note to self: might be possible if contour line number is index (devision of...))")},
+                    PlotBuilderColorMaps::Palette99ReversedOrder(_) => {println!("The palette colormap and Surface plots are a recipe for disaster, making no change (note to self: might be possible if contour line number is index (devision of...))")}
                     _ => {self.color_map = color_map;} 
                 }
                 self
@@ -164,7 +164,7 @@ macro_rules! impl_3d_line_functions {
             fn use_constraint_contour_preset(&mut self) -> &mut Self {
                 self.plot_zeroth_contour = Option::Some(false);
                 self.plot_non_zeroth_contour = Option::Some(false);
-                self.color_map = PlotBuilderColorMaps::ConstantRed;
+                self.color_map = PlotBuilderColorMaps::ConstantRed(1.);
                 self.contour_force_plot_around_zero = Option::Some(true);
                 self.contour_force_plot_around_zero_range = Option::Some(0. .. 0.01);
 
@@ -176,9 +176,9 @@ macro_rules! impl_3d_line_functions {
             }
 
             fn use_constraint_filled_preset(&mut self) -> &mut Self {
-                self.plot_zeroth_contour = Option::Some(true);
+                self.plot_zeroth_contour = Option::Some(false);
                 self.plot_non_zeroth_contour = Option::Some(true);
-                self.color_map = PlotBuilderColorMaps::ConstantRed;
+                self.color_map = PlotBuilderColorMaps::ConstantRed(1.);
 
                 self.plot_negative = Option::Some(false);
                 self.band_size = Option::Some(1.);

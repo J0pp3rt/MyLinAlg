@@ -1,6 +1,6 @@
 use crate::plotting::{*};
 use plotters::style::text_anchor::{HPos, Pos, VPos};
-
+use rayon::prelude::*;
 use plotters::prelude::{*};
 
 use crate::full_palette::GREY;
@@ -811,10 +811,10 @@ macro_rules! impl_plot_processor_plotters_backend_functions_per_type_with_annoyi
         
                         
                         match self.plots.polygons.as_ref().unwrap().color_map {
-                            PlotBuilderColorMaps::Palette99 => {
+                            PlotBuilderColorMaps::Palette99(_) => {
                                 index_of_line = (number / number_of_polygon) as f32;
                             },
-                            PlotBuilderColorMaps::Palette99ReversedOrder => {
+                            PlotBuilderColorMaps::Palette99ReversedOrder(_) => {
                                 index_of_line = (number / number_of_polygon) as f32;
                             },
                             _ => {
@@ -1133,8 +1133,8 @@ macro_rules! produce_other_2d_plot_settings {
 
                 index_of_line = number as f32 / amount_of_lines as f32;
                 match color_map {
-                    PlotBuilderColorMaps::Palette99 => { },
-                    PlotBuilderColorMaps::Palette99ReversedOrder => {},
+                    PlotBuilderColorMaps::Palette99 (_)=> { },
+                    PlotBuilderColorMaps::Palette99ReversedOrder(_) => {},
                     _ => {
                         index_of_line = ($self.plots.plotting_settings.color_map_restricter_upper_bound - $self.plots.plotting_settings.color_map_restricter_lower_bound) * index_of_line 
                                         + $self.plots.plotting_settings.color_map_restricter_lower_bound;
@@ -1151,8 +1151,8 @@ macro_rules! produce_other_2d_plot_settings {
                     index_of_line = number as f32 / amount_of_lines as f32;
 
                     match $self.plots.plotting_settings.color_map_line.clone() {
-                        PlotBuilderColorMaps::Palette99 => { },
-                        PlotBuilderColorMaps::Palette99ReversedOrder => {},
+                        PlotBuilderColorMaps::Palette99(_) => { },
+                        PlotBuilderColorMaps::Palette99ReversedOrder(_) => {},
                         _ => {
                             index_of_line = ($self.plots.plotting_settings.color_map_restricter_upper_bound - $self.plots.plotting_settings.color_map_restricter_lower_bound) * index_of_line 
                                             + $self.plots.plotting_settings.color_map_restricter_lower_bound;

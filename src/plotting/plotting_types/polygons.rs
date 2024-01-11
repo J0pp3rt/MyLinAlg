@@ -60,7 +60,7 @@ macro_rules! impl_triangles_functions_per_type {
                 PolygonSet::<$T> {
                     polygons: Vec::new(),
                     color: Option::None,
-                    color_map: PlotBuilderColorMaps::Vulcano,
+                    color_map: PlotBuilderColorMaps::Vulcano(1.),
                     line_width: Option::None,
                     filled: Option::None,
                 }

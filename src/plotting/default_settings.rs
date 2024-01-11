@@ -140,7 +140,7 @@ impl Default for PlotStyleSettings {
             outer_figure_margins: 10,
             marker_fill: MarkerFill::Filled,
             marker_style: MarkerStyle::None,
-            color_map_line: PlotBuilderColorMaps::Palette99,
+            color_map_line: PlotBuilderColorMaps::Palette99(1.),
             color_map_restricter_lower_bound: 0.25,
             color_map_restricter_upper_bound: 1.,
             line_color: Option::None,

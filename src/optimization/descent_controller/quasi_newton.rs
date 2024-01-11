@@ -2,7 +2,7 @@ use crate::{*};
 
 impl DescentController {
     
-    pub fn use_quasi_newton_method(&mut self, quasi_newton_method: QuasiNewton) -> &mut Self {
+    pub fn use_quasi_newton_method(&mut self, quasi_newton_method: QuasiNewton, controll_search_line: bool) -> &mut Self {
         assert!(if let Option::Some(_) = self.previous_hessian_approx {true} else {false}, "No Hessian approximation available from last itteration");
 
         let n_dof = self.n_dof();
@@ -29,7 +29,7 @@ impl DescentController {
                 let search_direction = -1. * next_hessian * gradient_current_step;
                 search_line = SpatialVectorWithBasePointNDof::new_with_base(&self.current_coordinates.x, &search_direction.vector);
             },
-            QuasiNewton::BFGSBeforeInverse => {                
+            QuasiNewton::BFGSNoInverse => {                
                 let da = 
                     sigma * &y*y.transpose() 
                     -  &hessian_approx*&dx*dx.transpose()*&hessian_approx / (dx.transpose() * &hessian_approx * &dx);
@@ -64,6 +64,7 @@ impl DescentController {
                 self.current_hessian_approx = Option::Some(next_hessian.clone());
                 let search_direction = -1. * next_hessian * gradient_current_step;
                 search_line = SpatialVectorWithBasePointNDof::new_with_base(&self.current_coordinates.x, &search_direction.vector);
+
             },
             QuasiNewton::DFPMoreStable => {
                 let db = 
@@ -76,10 +77,13 @@ impl DescentController {
                 self.current_hessian_approx = Option::Some(next_hessian.clone());
                 let search_direction = -1. * next_hessian * gradient_current_step;
                 search_line = SpatialVectorWithBasePointNDof::new_with_base(&self.current_coordinates.x, &search_direction.vector);
+
             },
         }
 
-        self.current_search_line = Option::Some(search_line);
+        if controll_search_line {
+            self.current_search_line = Option::Some(search_line);
+        }
         
         self
 

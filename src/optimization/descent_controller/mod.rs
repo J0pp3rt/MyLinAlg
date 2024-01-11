@@ -11,3 +11,7 @@ pub use ConjugateGradient::{*};
 
 pub mod quasi_newton;
 pub use QuasiNewton::{*};
+
+pub mod quadratic_programming;
+
+pub mod nonlinear_programming;

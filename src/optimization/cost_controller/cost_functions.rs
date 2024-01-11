@@ -4,8 +4,8 @@ pub fn get_cost_function_springs(x: &Vec<f64>) -> f64 {
     let l0: f64 = 10.;
     let k1: f64 = 8.;
     let k2: f64 = 4.;
-    let p1: f64 = 5.;
-    let p2: f64 = 10.;
+    let p1: f64 = 50.;
+    let p2: f64 = 100.;
 
     let position_node_1 = PosNDof::new(vec![0., l0]);
     let position_node_2 = PosNDof::new(vec![0., -l0]);

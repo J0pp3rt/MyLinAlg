@@ -2,7 +2,7 @@ use crate::{*};
 
 impl LineSearcher {
     pub fn golden_section_interpolation_iterate_untill_convergence(&mut self) -> &mut Self {
-
+        println!("using {}", self.optimization_settings.line_search_threshold );
         while self.golden_ratio_is_completed().not() {
             self.golden_section_interpolation_iterate();
         }

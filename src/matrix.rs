@@ -236,6 +236,7 @@ pub trait MatrixFunctions<T:MatrixValues> {
     fn substract_multiplied_internal_row_from_row_by_index(&mut self, row_number_to_substract_with: usize, factor: T , from_row_number: usize) ;
     fn substract_multiplied_internal_row_from_row_by_index_with_collumn_range(&mut self, row_number_to_substract_with: usize, factor: T , from_row_number: usize, collumn_range: impl InputTraitRowCol)  ;
     fn new_from_solver(system_of_equations : Solver2D<T>) -> Solved2D<T>;
+    fn solve_2d_system(a_matrix: Matrix<T>, b_matrix: Matrix<T>, solver_strategy: Solver2DStrategy) -> Matrix<T>;
     fn transpose_square(&mut self) -> &Self ;
     fn transpose_non_skinny(&mut self) -> &Self;
     fn make_square(&mut self) -> &Self;
@@ -247,6 +248,9 @@ pub trait MatrixFunctions<T:MatrixValues> {
     fn append_collumn_zeros_n_times(&mut self, n: usize) ;
     fn append_collumn(&mut self, collumn: Collumn<T>) -> &Self ;
     fn append_row_from_vec(&mut self, new_row_vec: Vec<T>);
+    fn remove_row(&mut self, row_index: usize) -> &mut Self;
+    fn remove_collumn(&mut self, collumn_index: usize) -> &mut Self;
+    fn fem_make_reduced_system(&mut self, remove_index: Vec<bool>) -> &mut Self;
     fn multiply_all_elements_by(&mut self, factor: T) -> &Self;
     fn divide_all_elements_by(&mut self, factor: T) -> &Self;
     fn update(&mut self, rows: impl InputTraitRowCol, colls: impl InputTraitRowCol, new_values: impl InputMatrix<T>);
@@ -270,9 +274,11 @@ macro_rules! impl_matrix_functions_for_type {
     
         fn new_with_constant_values(n_rows:usize, n_collumns: usize, value: $T) -> Matrix<$T> {
             let mut rows = Vec::<Row<$T>>::with_capacity(n_rows);
-            for _ in 0..n_rows {
-                rows.push(Row::new_row_with_value(n_collumns, value));
-            } 
+            if (n_collumns == 0).not() {
+                for _ in 0..n_rows {
+                    rows.push(Row::new_row_with_value(n_collumns, value));
+                } 
+            }
             Matrix {
                  rows,
                 }
@@ -362,13 +368,19 @@ macro_rules! impl_matrix_functions_for_type {
         }
     
         fn row_length(&self) -> usize {
-            let mut largest_length = self.rows[0].len();
-            for row in &self.rows {
-                if row.len() > largest_length {
-                    largest_length = row.len();
-                    println!("Row lengths of matrix not consistant!")
+            let mut largest_length: usize;
+            if self.rows.len() == 0 {
+                largest_length = 0;
+            } else {
+                largest_length = self.rows[0].len();
+                for row in &self.rows {
+                    if row.len() > largest_length {
+                        largest_length = row.len();
+                        println!("Row lengths of matrix not consistant!")
+                    }
                 }
             }
+
             largest_length
         }
     
@@ -482,8 +494,13 @@ macro_rules! impl_matrix_functions_for_type {
             assert!(self.height() == self.width(), "Can not find inverse if matrix not square");
 
             let eye = Matrix::new_square_eye(self.height(), 1 as $T);
-            let solved_system = $T::solve_with_guass(Solver2D {A_matrix: self.clone(), B_matrix: eye, solver: Solver2DStrategy::Guass});
-            solved_system.B_matrix
+            if self.height() == 0 || self.width() == 0 {
+                self.clone()
+            } else {
+                let solved_system = $T::solve_with_guass(Solver2D {A_matrix: self.clone(), B_matrix: eye, solver: Solver2DStrategy::Guass});
+                solved_system.B_matrix
+            }
+            
         }
     
         fn swap_rows(&mut self, row_1: usize, row_2: usize){
@@ -520,6 +537,18 @@ macro_rules! impl_matrix_functions_for_type {
                 _ => (panic!("Error: Solver not yet implemented!"))
             }
         }
+
+        fn solve_2d_system(a_matrix: Matrix<$T>, b_matrix: Matrix<$T>, solver_strategy: Solver2DStrategy) -> Matrix<$T> {
+            let solver_2d = Solver2D {
+                A_matrix: a_matrix,
+                B_matrix: b_matrix,
+                solver: solver_strategy,
+            };
+
+            let solved = Matrix::new_from_solver(solver_2d);
+            // possible to add some checks that A_matrix is actually an eye
+            solved.B_matrix
+        }
     
         fn transpose_square(&mut self) -> &Self {
             for row_index in 0..self.height()-1 {
@@ -535,7 +564,10 @@ macro_rules! impl_matrix_functions_for_type {
         fn transpose_non_skinny(&mut self) -> &Self {
             let initial_height = self.height();
             let initial_width = self.width();
-            if initial_height == initial_width {
+
+            if initial_height == 0 || initial_width == 0 {
+                return self
+            } else if initial_height == initial_width {
                 return self.transpose_square();
             }
     
@@ -639,6 +671,35 @@ macro_rules! impl_matrix_functions_for_type {
         fn append_row_from_vec(&mut self, new_row_vec: Vec<$T>) {
             let new_row = Row::new_row_from_vec(new_row_vec);
             self.append_row(new_row);
+        }
+
+        fn remove_row(&mut self, row_index: usize) -> &mut Self {
+            self.rows.remove(row_index);
+            self
+        }
+
+        fn remove_collumn(&mut self, collumn_index: usize) -> &mut Self {
+            for row in self.rows.iter_mut() {
+                row.cells.remove(collumn_index);
+            }
+            self
+        }
+
+        fn fem_make_reduced_system(&mut self, remove_index: Vec<bool>) -> &mut Self {
+            assert!(remove_index.len() == self.width() && remove_index.len() == self.height(), "Only square matrices allowed in reduced systems");
+            let mut build_up_correction_factor: usize = 0;
+
+            for (index, remove) in remove_index.iter().enumerate() {
+                if *remove {
+                    let corrected_index = index - build_up_correction_factor;
+                    self.remove_row(corrected_index);
+                    self.remove_collumn(corrected_index);
+
+                    build_up_correction_factor += 1;
+                }
+            }
+
+            self
         }
     
         fn multiply_all_elements_by(&mut self, factor: $T) -> &Self {

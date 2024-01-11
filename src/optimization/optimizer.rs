@@ -1,12 +1,31 @@
 use crate::{*};
 
-pub type CostFunction = Rc<Box<dyn Fn(&Vec<f64>) -> f64 + 'static >>;
+pub type CostFunction = Rc<Box<dyn Fn(&Vec<f64>) -> ObjectiveResult + 'static >>;
+pub type ConstraintFunction = Rc<Box<dyn Fn(&Vec<f64>) -> f64 + 'static >>;
 pub type AlgebraicDerivative = Rc<Box<dyn Fn(&Vec<f64>) -> Vec<f64> + 'static >>;
+
+pub struct ObjectiveResult {
+    pub function_cost: f64,
+    pub model_constraints: Vec<InequalityConstraintResult>,
+}
 
 #[macro_export]
 macro_rules! make_cost_function {
     ($function: ident) => {
-        Rc::new(Box::new(|x: &Vec<f64>| {$function(&x)}))
+        {
+            let result: CostFunction = Rc::new(Box::new(|x: &Vec<f64>| {$function(&x)}));
+            result
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! make_inequality_constraint_function {
+    ($function: ident) => {
+        {
+            let result: ConstraintFunction = Rc::new(Box::new(|x: &Vec<f64>| {$function(&x)}));
+            result
+        }
     };
 }
 
@@ -17,14 +36,28 @@ pub enum DifferentiationRule {
 }
 
 #[derive(Clone)]
-pub struct InequalityConstraint {
+pub struct ObjectiveFunction {
     pub constraint_function: CostFunction,
     pub algebraic_derivative_supplied: bool,
     pub algebraic_derivative: Option<AlgebraicDerivative>,
 }
 
+#[derive(Clone)]
+pub struct InequalityConstraintResult {
+    pub value: f64,
+    pub algebraic_derivative_supplied: bool,
+    pub algebraic_derivative: Option<AlgebraicDerivative>,
+}
+
+#[derive(Clone)]
+pub struct InequalityConstraint {
+    pub constraint_function: ConstraintFunction,
+    pub algebraic_derivative_supplied: bool,
+    pub algebraic_derivative: Option<AlgebraicDerivative>,
+}
+
 impl InequalityConstraint {
-    pub fn new(constraint_function: CostFunction) -> Self {
+    pub fn new(constraint_function: ConstraintFunction) -> Self {
         Self {
             constraint_function,
             algebraic_derivative_supplied: false ,
@@ -32,7 +65,7 @@ impl InequalityConstraint {
         }
     }
 
-    pub fn new_with_derivative(constraint_function: CostFunction, algebraic_derivative: AlgebraicDerivative) -> Self {
+    pub fn new_with_derivative(constraint_function: ConstraintFunction, algebraic_derivative: AlgebraicDerivative) -> Self {
         Self {
             constraint_function,
             algebraic_derivative_supplied: true,
@@ -44,8 +77,8 @@ impl InequalityConstraint {
 #[derive(Clone)]
 pub struct Optimizer {
     pub descent_controller: DescentController,
-    plot_contour: bool,
-    plot_constraints: bool,
+    pub plot_contour: bool,
+    pub plot_constraints: bool,
 }
 
 impl Optimizer {
@@ -54,11 +87,11 @@ impl Optimizer {
     ) -> Self {
         let plot_constraints: bool;
         match descent_controller.optimization_settings.constraint_rules.constrained {
-            OptimizationType::Constrained => {
-                plot_constraints = true
-            },
             OptimizationType::Unconstrained => {
                 plot_constraints = false
+            },
+            _=> {
+                plot_constraints = true
             },
         }
         Optimizer {
@@ -97,9 +130,13 @@ impl Optimizer {
                     plot.plotting_settings.axis_equal_length = true;
                 },
                 2 => {
-                    let line_2d = Line2d::new(&coordinates_log[0],&coordinates_log[1]);
-                    plot.add_2d_line(&line_2d)
-                        .set_x_label("X_1")
+                    for line_partition in 0 .. coordinates_log[0].len() -1 {
+                        let line_2d = Line2d::new(&vec![coordinates_log[0][line_partition], coordinates_log[0][line_partition+1]],&vec![coordinates_log[1][line_partition],coordinates_log[1][line_partition+1]] );
+                        plot.add_2d_line(&line_2d);
+                    }
+                    // let line_2d = Line2d::new(&coordinates_log[0],&coordinates_log[1]);
+                    // plot.add_2d_line(&line_2d);
+                    plot.set_x_label("X_1")
                         .set_y_label("X_2");
                     plot.plotting_settings.axis_equal_length = true;
 
@@ -114,8 +151,12 @@ impl Optimizer {
                                 number_cost_function_evaluation: cost_controller_plot.number_cost_function_evaluation.clone(),
                                 number_constraint_function_evaluations: cost_controller_plot.number_constraint_function_evaluations.clone(),
                                 constraint_rules: cost_controller_plot.constraint_rules.clone(),
+                                optimization_settings: cost_controller_plot.optimization_settings.clone(),
+                                n_constraints_objective_result: cost_controller_plot.n_constraints_objective_result.clone(),
                             }.cost_at_x(&x)))
                         );
+
+                        // contour_plot.plot_zeroth_contour = Option::Some(false);
 
                         plot.add_contour(contour_plot);
 
@@ -123,7 +164,7 @@ impl Optimizer {
                         if self.plot_constraints {
                             
 
-                            for constraint_index in 0..self.descent_controller.line_searcher.cost_controller.constraint_inequality_functions.len(){
+                            for constraint_index in 0..self.descent_controller.line_searcher.cost_controller.n_constraints(){
                                 let cost_controller_plot = self.descent_controller.line_searcher.cost_controller.clone();
                                 
                                 let mut contour_plot = Surface3d::new_contour_fn(
@@ -135,11 +176,15 @@ impl Optimizer {
                                         number_cost_function_evaluation: cost_controller_plot.number_cost_function_evaluation.clone(),
                                         number_constraint_function_evaluations: cost_controller_plot.number_constraint_function_evaluations.clone(),
                                         constraint_rules: cost_controller_plot.constraint_rules.clone(),
+                                        optimization_settings: cost_controller_plot.optimization_settings.clone(),
+                                        n_constraints_objective_result: cost_controller_plot.n_constraints_objective_result.clone(),
                                     }.inequality_contraint_value(constraint_index, &x)))
                                 );
-                                contour_plot.use_constraint_contour_preset();
+                                contour_plot.use_constraint_filled_preset();
 
                                 plot.add_contour(contour_plot);
+                                
+
                             }
                         }
                         
@@ -154,6 +199,11 @@ impl Optimizer {
                 }
             }
 
+            // plot.set_x_range(10. .. 15.).set_y_range(18. .. 20.);
+                                plot.set_x_range(-1.1 .. 2.9).set_y_range(-0.6 .. 3.4);
+                                plot.plotting_settings.contour_n_points = 175;
+
+            plot.plotting_settings.color_map_line = PlotBuilderColorMaps::Viridis(1.);
             plot.to_plotters_processor().bitmap_to_file(path);
         }
         self
@@ -170,7 +220,12 @@ impl Optimizer {
         let mut plot = PlotBuilder::new();
         plot.scale_plot(4.);
 
-        plot.add_simple_2d_line_y_only(&convergence_log);
+        for line_partition in 0 .. convergence_log.len() -1 {
+            let simple_line_partition = vec![convergence_log[line_partition], convergence_log[line_partition+1]];
+            let x_vlues = vec![line_partition as f64, (line_partition + 1) as f64];
+            plot.add_simple_2d_line(&x_vlues, &simple_line_partition);
+        }
+        // plot.add_simple_2d_line_y_only(&convergence_log);
 
         plot.set_y_axis_type(PlotAxisScaling::Log);
 
@@ -178,6 +233,7 @@ impl Optimizer {
             .set_y_label("|Difergence(F)|");
         plot.plotting_settings.show_grid_major = true;
 
+        plot.plotting_settings.color_map_line = PlotBuilderColorMaps::Viridis(1.);
         plot.to_plotters_processor().bitmap_to_file(path);
 
         self

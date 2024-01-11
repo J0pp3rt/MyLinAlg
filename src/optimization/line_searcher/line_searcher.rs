@@ -1,13 +1,15 @@
 
 #[derive(Debug, Clone, Copy)]
 pub enum LineSearchExtrapolationMethods {
-    GoldenRuleExtrapolation
+    GoldenRuleExtrapolation,
+    NoLineSearch,
 }
 
 #[derive(Clone, Debug, Copy)]
 pub enum LineSearchInterpolationMethods {
     GoldenRuleInterpolation,
     QuadraticInterpolation,
+    NoLineSearch,
 }
 
 use plotters::element::CoordMapper;
@@ -83,6 +85,12 @@ impl LineSearcher {
 
         self.search_line = new_search_line;
 
+        self
+    }
+
+    pub fn take_simple_step(&mut self) -> &mut Self {
+        
+        
         self
     }
 }

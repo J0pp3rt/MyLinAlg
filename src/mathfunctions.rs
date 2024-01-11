@@ -184,6 +184,9 @@ pub trait SpatialVectorNdofFunctions<T: MatrixValues, Orientation = IsColl> {
     fn scale_to_length(&mut self, new_length: T) -> &mut Self;
     fn flip_direction(&mut self) -> &mut Self;
     fn n_dof(&self) -> usize;
+    fn scaling_factor_untill_coordinate(&self, coordinate: T, dof: usize) -> MaxScalingFactorReturn<T>;
+    fn multiply_piecewice(&self, other_vector: &SpatialVectorNDof<T, Orientation>) -> SpatialVectorNDof<T, Orientation>;
+    fn devide_piecewice(&self, other_vector: &SpatialVectorNDof<T, Orientation>) -> SpatialVectorNDof<T, Orientation>;
 }
 
 impl<T: MatrixValues> SpatialVectorNDof<T, IsColl> {
@@ -303,6 +306,12 @@ impl<T: MatrixValues> TransposeCollumnToRow<T> for SpatialVectorNDof<T, IsColl> 
 //         todo!()
 //     }
 // }
+
+pub enum MaxScalingFactorReturn<T: MatrixValues> {
+    ScalingFactor(T),
+    ZeroDistance,
+    NotBound,
+}
 
 macro_rules! impl_spatial_types_per_type {
     ($T: ident) => {
@@ -570,9 +579,60 @@ macro_rules! impl_spatial_types_per_type {
             fn n_dof(&self) -> usize {
                 self.vector.len()
             }
+
+            fn scaling_factor_untill_coordinate(&self, coordinate: $T, dof: usize) -> MaxScalingFactorReturn<$T> {
+                let direction_stepsize = self.vector[dof];
+                let distance = coordinate;
+
+                let result: MaxScalingFactorReturn<$T>;
+                if direction_stepsize < 0 as $T && distance < 0 as $T {
+                    let max_scaling_untill_coordinate = distance / direction_stepsize;
+                    result = MaxScalingFactorReturn::ScalingFactor(max_scaling_untill_coordinate);
+                } else if direction_stepsize > 0 as $T && distance > 0 as $T {
+                    let max_scaling_untill_coordinate = distance / direction_stepsize;
+                    result = MaxScalingFactorReturn::ScalingFactor(max_scaling_untill_coordinate);
+                } else if distance == 0 as $T {
+                    result = MaxScalingFactorReturn::ZeroDistance;
+                } else {
+                    result = MaxScalingFactorReturn::NotBound;
+                }
+
+                // let max_scaling_untill_coordinate = distance / direction_stepsize;
+                result
+            }
+
+            fn multiply_piecewice(&self, other_vector: &SpatialVectorNDof<$T, Orientation>) -> SpatialVectorNDof<$T, Orientation> {
+                assert!(self.vector.len() == other_vector.vector.len(), "Piecewice multiplication sizes dont match!" );
+
+                let mut new_vector = SpatialVectorNDof::<$T, Orientation> {
+                    vector: self.vector.clone(),
+                    _orientation: PhantomData
+                };
+
+                for (value, other_value) in new_vector.vector.iter_mut().zip(other_vector.vector.iter()) {
+                    *value = *value * *other_value;
+                }
+
+                new_vector
+            }
+
+            fn devide_piecewice(&self, other_vector: &SpatialVectorNDof<$T, Orientation>) -> SpatialVectorNDof<$T, Orientation> {
+                assert!(self.vector.len() == other_vector.vector.len(), "Piecewice multiplication sizes dont match!" );
+
+                let mut new_vector = SpatialVectorNDof::<$T, Orientation> {
+                    vector: self.vector.clone(),
+                    _orientation: PhantomData
+                };
+
+                for (value, other_value) in new_vector.vector.iter_mut().zip(other_vector.vector.iter()) {
+                    *value = *value / *other_value;
+                }
+
+                new_vector
+            }
         }
 
-        impl SpatialVectorNdofFunctions<$T, IsColl> for SpatialVectorWithBasePointNDof<$T,IsColl> {
+        impl<Orientation: Clone> SpatialVectorNdofFunctions<$T, Orientation> for SpatialVectorWithBasePointNDof<$T,Orientation> {
             fn export(self) -> Self {
                 self
             }
@@ -658,6 +718,59 @@ macro_rules! impl_spatial_types_per_type {
 
             fn n_dof(&self) -> usize {
                 self.vector.len()
+            }
+
+            fn scaling_factor_untill_coordinate(&self, coordinate: $T, dof: usize) -> MaxScalingFactorReturn<$T> {
+                let direction_stepsize = self.vector[dof];
+                let current_coordinate = self.point[dof];
+                let distance = coordinate - current_coordinate;
+
+                let result: MaxScalingFactorReturn<$T>;
+                if direction_stepsize < 0 as $T && distance < 0 as $T {
+                    let max_scaling_untill_coordinate = distance / direction_stepsize;
+                    result = MaxScalingFactorReturn::ScalingFactor(max_scaling_untill_coordinate);
+                } else if direction_stepsize > 0 as $T && distance > 0 as $T {
+                    let max_scaling_untill_coordinate = distance / direction_stepsize;
+                    result = MaxScalingFactorReturn::ScalingFactor(max_scaling_untill_coordinate);
+                } else if distance == 0 as $T {
+                    result = MaxScalingFactorReturn::ZeroDistance;
+                } else {
+                    result = MaxScalingFactorReturn::NotBound;
+                }
+
+                // let max_scaling_untill_coordinate = distance / direction_stepsize;
+                result
+            }
+
+
+            fn multiply_piecewice(&self, other_vector: &SpatialVectorNDof<$T, Orientation>) -> SpatialVectorNDof<$T, Orientation> {
+                assert!(self.vector.len() == other_vector.vector.len(), "Piecewice multiplication sizes dont match!" );
+
+                let mut new_vector = SpatialVectorNDof::<$T, Orientation> {
+                    vector: self.vector.clone(),
+                    _orientation: PhantomData
+                };
+
+                for (value, other_value) in new_vector.vector.iter_mut().zip(other_vector.vector.iter()) {
+                    *value = *value * *other_value;
+                }
+
+                new_vector
+            }
+
+            fn devide_piecewice(&self, other_vector: &SpatialVectorNDof<$T, Orientation>) -> SpatialVectorNDof<$T, Orientation> {
+                assert!(self.vector.len() == other_vector.vector.len(), "Piecewice multiplication sizes dont match!" );
+
+                let mut new_vector = SpatialVectorNDof::<$T, Orientation> {
+                    vector: self.vector.clone(),
+                    _orientation: PhantomData
+                };
+
+                for (value, other_value) in new_vector.vector.iter_mut().zip(other_vector.vector.iter()) {
+                    *value = *value / *other_value;
+                }
+
+                new_vector
             }
         }
 
